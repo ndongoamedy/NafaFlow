@@ -123,6 +123,9 @@
         @keyframes floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
         .animate-floaty { animation: floaty 3.5s ease-in-out infinite; }
     </style>
+<link rel="icon" href="/favicon.ico" sizes="any"/>
+<link rel="icon" type="image/png" href="/logo-icon.png"/>
+<link rel="apple-touch-icon" href="/logo-icon.png"/>
 </head>
 <body class="bg-surface text-on-surface font-body-md antialiased selection:bg-primary-container selection:text-on-primary-container">
 <!-- TopNavBar -->
@@ -146,9 +149,21 @@
 <a class="font-body-sm text-body-sm font-bold bg-primary text-on-primary px-4 py-2 rounded-lg hover:opacity-90 transition-opacity transform active:scale-95 duration-150 shadow-level-1" href="/login?mode=signup">Essai Gratuit</a>
 </div>
 <!-- Mobile Menu Toggle -->
-<button class="md:hidden text-on-surface hover:text-primary transition-colors">
-<span class="material-symbols-outlined text-2xl">menu</span>
+<button id="mobile-menu-toggle" aria-label="Menu" aria-expanded="false" class="md:hidden text-on-surface hover:text-primary transition-colors">
+<span id="mobile-menu-icon" class="material-symbols-outlined text-2xl">menu</span>
 </button>
+</div>
+<!-- Mobile Menu Panel -->
+<div id="mobile-menu" class="hidden md:hidden border-t border-outline-variant/30 bg-surface">
+<div class="flex flex-col px-margin-mobile py-4 gap-1">
+<a class="font-body-md text-body-md text-on-surface py-2.5 px-2 rounded-lg hover:bg-surface-container transition-colors" href="#fonctionnalites">Fonctionnalités</a>
+<a class="font-body-md text-body-md text-on-surface py-2.5 px-2 rounded-lg hover:bg-surface-container transition-colors" href="#comment-ca-marche">Comment ça marche</a>
+<a class="font-body-md text-body-md text-on-surface py-2.5 px-2 rounded-lg hover:bg-surface-container transition-colors" href="#tarifs">Tarifs</a>
+<a class="font-body-md text-body-md text-on-surface py-2.5 px-2 rounded-lg hover:bg-surface-container transition-colors" href="#temoignages">Témoignages</a>
+<div class="h-px bg-outline-variant/30 my-2"></div>
+<a class="font-body-md text-body-md font-semibold text-primary py-2.5 px-2 rounded-lg hover:bg-surface-container transition-colors" href="/login">Connexion</a>
+<a class="font-body-md text-body-md font-bold bg-primary text-on-primary text-center px-4 py-3 rounded-lg hover:opacity-90 transition-opacity mt-1" href="/login?mode=signup">Essai Gratuit</a>
+</div>
 </div>
 </nav>
 <main>
@@ -627,6 +642,26 @@
       });
     }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
     els.forEach(function (el) { io.observe(el); });
+  })();
+
+  // Menu mobile
+  (function () {
+    var toggle = document.getElementById('mobile-menu-toggle');
+    var menu = document.getElementById('mobile-menu');
+    var icon = document.getElementById('mobile-menu-icon');
+    if (!toggle || !menu) return;
+    function setOpen(open) {
+      menu.classList.toggle('hidden', !open);
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (icon) icon.textContent = open ? 'close' : 'menu';
+    }
+    toggle.addEventListener('click', function () {
+      setOpen(menu.classList.contains('hidden'));
+    });
+    // Fermer au clic sur un lien
+    menu.querySelectorAll('a').forEach(function (a) {
+      a.addEventListener('click', function () { setOpen(false); });
+    });
   })();
 </script>
 </body></html>
