@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+
+<html class="scroll-smooth" lang="fr"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>NafaFlow - Simplifier la finance pour les entrepreneurs</title>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "surface-container-highest": "#d3e4fe",
+                        "surface-dim": "#cbdbf5",
+                        "on-tertiary": "#ffffff",
+                        "on-background": "#0b1c30",
+                        "error": "#ba1a1a",
+                        "on-surface-variant": "#3e4a3d",
+                        "primary-container": "#00873a",
+                        "surface-container-lowest": "#ffffff",
+                        "on-primary-container": "#f7fff2",
+                        "primary-fixed": "#7ffc97",
+                        "on-error": "#ffffff",
+                        "tertiary-fixed": "#d9e6dd",
+                        "surface-container": "#e5eeff",
+                        "primary-fixed-dim": "#62df7d",
+                        "on-primary": "#ffffff",
+                        "tertiary-fixed-dim": "#bdcac1",
+                        "tertiary": "#535f58",
+                        "surface-container-high": "#dce9ff",
+                        "on-tertiary-fixed-variant": "#3e4943",
+                        "on-secondary-container": "#5c647a",
+                        "secondary": "#565e74",
+                        "on-error-container": "#93000a",
+                        "on-secondary-fixed-variant": "#3f465c",
+                        "surface-bright": "#f8f9ff",
+                        "error-container": "#ffdad6",
+                        "on-primary-fixed": "#002109",
+                        "inverse-primary": "#62df7d",
+                        "surface": "#f8f9ff",
+                        "secondary-fixed-dim": "#bec6e0",
+                        "secondary-fixed": "#dae2fd",
+                        "primary": "#006b2c",
+                        "background": "#f8f9ff",
+                        "secondary-container": "#dae2fd",
+                        "surface-container-low": "#eff4ff",
+                        "on-tertiary-container": "#f5fff7",
+                        "on-tertiary-fixed": "#131e19",
+                        "outline-variant": "#bdcaba",
+                        "tertiary-container": "#6b7770",
+                        "surface-variant": "#d3e4fe",
+                        "outline": "#6e7b6c",
+                        "on-surface": "#0b1c30",
+                        "inverse-on-surface": "#eaf1ff",
+                        "on-secondary": "#ffffff",
+                        "inverse-surface": "#213145",
+                        "surface-tint": "#006e2d",
+                        "on-primary-fixed-variant": "#005320",
+                        "on-secondary-fixed": "#131b2e"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    spacing: {
+                        "margin-mobile": "16px",
+                        "gutter": "24px",
+                        "stack-sm": "8px",
+                        "margin-desktop": "40px",
+                        "container-max": "1280px",
+                        "stack-md": "16px",
+                        "stack-lg": "32px"
+                    },
+                    fontFamily: {
+                        "headline-xl": ["Hanken Grotesk"],
+                        "body-md": ["Inter"],
+                        "label-numeric": ["JetBrains Mono"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "body-lg": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "headline-lg": ["Hanken Grotesk"],
+                        "headline-lg-mobile": ["Hanken Grotesk"]
+                    },
+                    fontSize: {
+                        "headline-xl": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "label-numeric": ["14px", { "lineHeight": "20px", "fontWeight": "500" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }],
+                        "body-sm": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "headline-lg-mobile": ["28px", { "lineHeight": "36px", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        /* Soft shadows representing levels 1 and 2 from design system */
+        .shadow-level-1 { box-shadow: 0px 4px 12px rgba(15, 23, 42, 0.03); }
+        .shadow-level-2 { box-shadow: 0px 8px 24px rgba(15, 23, 42, 0.08); }
+        /* Animations d'apparition au scroll */
+        .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.7s cubic-bezier(0.22,1,0.36,1), transform 0.7s cubic-bezier(0.22,1,0.36,1); }
+        .reveal.is-visible { opacity: 1; transform: translateY(0); }
+        .reveal-delay-1 { transition-delay: 0.08s; }
+        .reveal-delay-2 { transition-delay: 0.16s; }
+        .reveal-delay-3 { transition-delay: 0.24s; }
+        @media (prefers-reduced-motion: reduce) {
+            .reveal { opacity: 1 !important; transform: none !important; transition: none !important; }
+        }
+        @keyframes floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+        .animate-floaty { animation: floaty 3.5s ease-in-out infinite; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body-md antialiased selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopNavBar -->
+<nav class="docked full-width top-0 sticky z-50 bg-surface/80 dark:bg-surface/80 backdrop-blur-md border-b border-outline-variant/30 transition-all duration-300">
+<div class="flex justify-between items-center w-full px-margin-desktop max-w-container-max mx-auto py-4">
+<!-- Brand -->
+<a class="flex items-center gap-2 hover:opacity-90 transition-opacity" href="#">
+<img alt="Logo NafaFlow" class="h-8 w-8 rounded" src="/logo-icon.png"/>
+<span class="font-headline-md text-headline-md font-bold text-on-surface dark:text-inverse-on-surface tracking-tight">NafaFlow</span>
+</a>
+<!-- Desktop Links -->
+<div class="hidden md:flex items-center gap-8">
+<a class="font-body-sm text-body-sm text-on-surface-variant hover:text-primary transition-colors" href="#fonctionnalites">Fonctionnalités</a>
+<a class="font-body-sm text-body-sm text-on-surface-variant hover:text-primary transition-colors" href="#comment-ca-marche">Comment ça marche</a>
+<a class="font-body-sm text-body-sm text-on-surface-variant hover:text-primary transition-colors" href="#tarifs">Tarifs</a>
+<a class="font-body-sm text-body-sm text-on-surface-variant hover:text-primary transition-colors" href="#temoignages">Témoignages</a>
+</div>
+<!-- Actions -->
+<div class="hidden md:flex items-center gap-4">
+<a class="font-body-sm text-body-sm font-semibold text-primary dark:text-primary-fixed hover:opacity-90 transition-opacity" href="/login">Connexion</a>
+<a class="font-body-sm text-body-sm font-bold bg-primary text-on-primary px-4 py-2 rounded-lg hover:opacity-90 transition-opacity transform active:scale-95 duration-150 shadow-level-1" href="/login?mode=signup">Essai Gratuit</a>
+</div>
+<!-- Mobile Menu Toggle -->
+<button class="md:hidden text-on-surface hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-2xl">menu</span>
+</button>
+</div>
+</nav>
+<main>
+<!-- Hero Section -->
+<section class="relative pt-24 pb-32 overflow-hidden">
+<!-- Background Decoration -->
+<div class="absolute top-0 right-0 -z-10 w-full h-full overflow-hidden pointer-events-none opacity-40">
+<div class="absolute -top-[10%] -right-[10%] w-[50%] h-[50%] rounded-full bg-primary-container blur-[100px]"></div>
+<div class="absolute top-[40%] -left-[10%] w-[40%] h-[40%] rounded-full bg-surface-container-high blur-[80px]"></div>
+</div>
+<div class="max-w-container-max mx-auto px-margin-desktop grid md:grid-cols-2 gap-gutter items-center">
+<!-- Text Content -->
+<div class="flex flex-col gap-6 relative z-10 reveal is-visible">
+<div class="inline-flex items-center gap-2 bg-surface-container-low border border-outline-variant/50 text-primary font-label-numeric text-label-numeric px-3 py-1 rounded-full w-fit">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+                        Nouveau au Sénégal
+                    </div>
+<h1 class="font-headline-xl text-headline-xl text-on-surface leading-tight">
+                        Fini les devis sur WhatsApp.<br/>
+<span class="text-primary">Fini les tableaux Excel.</span>
+</h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-lg">
+                        NafaFlow simplifie la gestion financière des PME et entrepreneurs en Afrique de l'Ouest. Facturez, encaissez et suivez votre trésorerie en temps réel, sans friction.
+                    </p>
+<div class="flex flex-col sm:flex-row gap-4 mt-4">
+<a class="inline-flex justify-center items-center font-body-md text-body-md font-bold bg-primary text-on-primary px-6 py-3 rounded-lg hover:opacity-90 transition-opacity shadow-level-1" href="/login?mode=signup">
+                            Commencer gratuitement
+                        </a>
+<a class="inline-flex justify-center items-center gap-2 font-body-md text-body-md font-semibold bg-surface-container text-on-surface px-6 py-3 rounded-lg hover:bg-surface-container-high transition-colors border border-outline-variant/30" href="#">
+<span class="material-symbols-outlined">play_circle</span>
+                            Voir la démo
+                        </a>
+</div>
+</div>
+<!-- Hero Visual -->
+<div class="relative mt-12 md:mt-0 z-10 perspective-1000 reveal is-visible reveal-delay-2">
+<div class="relative bg-surface-container-lowest rounded-xl border border-outline-variant/30 shadow-level-2 overflow-hidden transform md:-rotate-y-6 md:rotate-x-6 hover:rotate-0 transition-transform duration-700 ease-out">
+<!-- Browser Header -->
+<div class="bg-surface-container flex items-center px-4 py-3 border-b border-outline-variant/30 gap-2">
+<div class="flex gap-1.5">
+<div class="w-3 h-3 rounded-full bg-error/80"></div>
+<div class="w-3 h-3 rounded-full bg-tertiary/50"></div>
+<div class="w-3 h-3 rounded-full bg-primary/80"></div>
+</div>
+<div class="mx-auto bg-surface px-4 py-1 rounded text-xs text-on-surface-variant font-label-numeric font-medium opacity-70">
+                                app.nafaflow.com
+                            </div>
+</div>
+<!-- Dashboard Mockup (vectoriel, pas une image) -->
+<div class="flex bg-[#F8FAFC] h-[300px] sm:h-[340px] overflow-hidden text-left select-none">
+<!-- Mini sidebar -->
+<div class="w-[34%] bg-gradient-to-b from-[#0F3E2B] to-[#124b32] p-3 flex flex-col gap-3">
+<div class="flex items-center gap-1.5">
+<div class="h-6 w-6 rounded-md bg-white flex items-center justify-center shrink-0 overflow-hidden">
+<img alt="" class="h-4 w-4 object-contain" src="/logo-icon.png"/>
+</div>
+<span class="text-white font-bold text-[11px] tracking-tight">NafaFlow</span>
+</div>
+<div class="flex flex-col gap-1.5 mt-1">
+<div class="flex items-center gap-1.5 bg-[#16A34A] rounded-md px-2 py-1.5">
+<span class="h-1.5 w-1.5 rounded-full bg-white"></span>
+<span class="h-1.5 w-10 rounded-full bg-white/80"></span>
+</div>
+<div class="flex items-center gap-1.5 px-2 py-1.5"><span class="h-1.5 w-1.5 rounded-full bg-green-300/40"></span><span class="h-1.5 w-8 rounded-full bg-green-200/25"></span></div>
+<div class="flex items-center gap-1.5 px-2 py-1.5"><span class="h-1.5 w-1.5 rounded-full bg-green-300/40"></span><span class="h-1.5 w-12 rounded-full bg-green-200/25"></span></div>
+<div class="flex items-center gap-1.5 px-2 py-1.5"><span class="h-1.5 w-1.5 rounded-full bg-green-300/40"></span><span class="h-1.5 w-9 rounded-full bg-green-200/25"></span></div>
+<div class="flex items-center gap-1.5 px-2 py-1.5"><span class="h-1.5 w-1.5 rounded-full bg-green-300/40"></span><span class="h-1.5 w-11 rounded-full bg-green-200/25"></span></div>
+</div>
+</div>
+<!-- Main area -->
+<div class="flex-1 p-3.5 flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<div class="flex flex-col gap-1"><span class="h-2 w-16 rounded-full bg-slate-300"></span><span class="h-1.5 w-24 rounded-full bg-slate-200"></span></div>
+<div class="h-5 w-5 rounded-full bg-emerald-100"></div>
+</div>
+<!-- KPI cards -->
+<div class="grid grid-cols-2 gap-2.5">
+<div class="bg-white rounded-lg p-2.5 shadow-sm border border-slate-100">
+<span class="block h-1.5 w-12 rounded-full bg-slate-200 mb-2"></span>
+<span class="block text-[#0b1c30] font-extrabold text-sm tracking-tight">350 000 F</span>
+<span class="inline-block mt-1.5 text-[8px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded">▲ +8.2%</span>
+</div>
+<div class="bg-white rounded-lg p-2.5 shadow-sm border border-slate-100">
+<span class="block h-1.5 w-14 rounded-full bg-slate-200 mb-2"></span>
+<span class="block text-[#0b1c30] font-extrabold text-sm tracking-tight">1 250 000 F</span>
+<span class="inline-block mt-1.5 text-[8px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded">▲ +12.4%</span>
+</div>
+</div>
+<!-- Chart -->
+<div class="bg-white rounded-lg p-3 shadow-sm border border-slate-100 flex-1 flex flex-col">
+<span class="block h-1.5 w-16 rounded-full bg-slate-200 mb-3"></span>
+<div class="flex-1 flex items-end justify-between gap-1.5">
+<div class="w-full rounded-t bg-[#16A34A]/25" style="height:38%"></div>
+<div class="w-full rounded-t bg-[#16A34A]/35" style="height:55%"></div>
+<div class="w-full rounded-t bg-[#16A34A]/30" style="height:47%"></div>
+<div class="w-full rounded-t bg-[#16A34A]/55" style="height:70%"></div>
+<div class="w-full rounded-t bg-[#16A34A]/45" style="height:62%"></div>
+<div class="w-full rounded-t bg-[#16A34A]" style="height:88%"></div>
+<div class="w-full rounded-t bg-[#16A34A]/50" style="height:66%"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Floating abstract stat card -->
+<div class="absolute -bottom-6 -left-6 bg-surface-container-lowest p-4 rounded-lg shadow-level-2 border border-outline-variant/20 flex items-center gap-4 animate-floaty">
+<div class="w-10 h-10 rounded-full bg-primary-container text-primary flex items-center justify-center">
+<span class="material-symbols-outlined">trending_up</span>
+</div>
+<div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Revenus du mois</p>
+<p class="font-headline-md text-headline-md text-on-surface">1 250 000 F</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Problem Section -->
+<section class="py-24 bg-surface-container-low border-y border-outline-variant/20">
+<div class="max-w-container-max mx-auto px-margin-desktop text-center">
+<h2 class="font-headline-lg text-headline-lg text-on-surface mb-4 reveal">La gestion financière ne devrait pas être un fardeau.</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl mx-auto mb-16">
+                    Votre temps est précieux. Ne le perdez plus sur des tâches répétitives qui freinent votre croissance.
+                </p>
+<div class="grid md:grid-cols-3 gap-gutter text-left">
+<div class="bg-surface-container-lowest p-8 rounded-xl border border-outline-variant/30 shadow-level-1 reveal">
+<div class="w-12 h-12 rounded-lg bg-error-container text-on-error-container flex items-center justify-center mb-6">
+<span class="material-symbols-outlined">notifications_off</span>
+</div>
+<h3 class="font-headline-md text-[20px] font-semibold text-on-surface mb-3">Relances oubliées</h3>
+<p class="font-body-md text-body-md text-on-surface-variant">Les factures impayées s'accumulent car vous manquez de temps pour relancer systématiquement vos clients.</p>
+</div>
+<div class="bg-surface-container-lowest p-8 rounded-xl border border-outline-variant/30 shadow-level-1 reveal">
+<div class="w-12 h-12 rounded-lg bg-surface-dim text-on-surface flex items-center justify-center mb-6">
+<span class="material-symbols-outlined">visibility_off</span>
+</div>
+<h3 class="font-headline-md text-[20px] font-semibold text-on-surface mb-3">Trésorerie floue</h3>
+<p class="font-body-md text-body-md text-on-surface-variant">Naviguer à vue sans savoir précisément ce qui entre et ce qui sort met votre entreprise en danger.</p>
+</div>
+<div class="bg-surface-container-lowest p-8 rounded-xl border border-outline-variant/30 shadow-level-1 reveal">
+<div class="w-12 h-12 rounded-lg bg-tertiary-fixed text-on-tertiary-fixed mb-6 flex items-center justify-center">
+<span class="material-symbols-outlined">calculate</span>
+</div>
+<h3 class="font-headline-md text-[20px] font-semibold text-on-surface mb-3">Calculs manuels</h3>
+<p class="font-body-md text-body-md text-on-surface-variant">Les erreurs de calcul de TVA ou de marge sur Excel vous coûtent de l'argent et de la crédibilité.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Features Bento Grid -->
+<section class="py-32 bg-surface" id="fonctionnalites">
+<div class="max-w-container-max mx-auto px-margin-desktop">
+<div class="text-center mb-16">
+<h2 class="font-headline-lg text-headline-lg text-on-surface mb-4 reveal">Des outils conçus pour la performance</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl mx-auto">
+                        Tout ce dont vous avez besoin pour professionnaliser votre approche et être payé plus rapidement.
+                    </p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-[280px]">
+<!-- Feature 1: Large -->
+<div class="lg:col-span-2 bg-surface-container-lowest rounded-xl p-8 border border-outline-variant/30 shadow-level-1 flex flex-col justify-between relative overflow-hidden group hover:shadow-level-2 transition-shadow">
+<div class="absolute top-0 right-0 w-64 h-64 bg-primary-container/20 rounded-full blur-[60px] -mr-20 -mt-20 transition-all group-hover:bg-primary-container/30"></div>
+<div class="relative z-10">
+<div class="w-12 h-12 rounded bg-primary text-on-primary flex items-center justify-center mb-6">
+<span class="material-symbols-outlined">receipt_long</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-2">Factures &amp; Relances Automatiques</h3>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-md">
+                                Transformez vos devis en factures d'un clic. Paramétrez des scénarios de relance pour ne plus jamais courir après vos paiements.
+                            </p>
+</div>
+</div>
+<!-- Feature 2 -->
+<div class="bg-surface-container-lowest rounded-xl p-8 border border-outline-variant/30 shadow-level-1 flex flex-col justify-between hover:shadow-level-2 transition-shadow">
+<div>
+<div class="w-12 h-12 rounded bg-secondary-container text-on-secondary-container flex items-center justify-center mb-6">
+<span class="material-symbols-outlined">timer</span>
+</div>
+<h3 class="font-headline-md text-[20px] font-semibold text-on-surface mb-2">Devis en 90s</h3>
+<p class="font-body-md text-body-md text-on-surface-variant">
+                                Créez des devis professionnels aux normes UEMOA sur mobile ou bureau, et concluez plus vite.
+                            </p>
+</div>
+</div>
+<!-- Feature 3 -->
+<div class="bg-surface-container-lowest rounded-xl p-8 border border-outline-variant/30 shadow-level-1 flex flex-col justify-between hover:shadow-level-2 transition-shadow">
+<div>
+<div class="w-12 h-12 rounded bg-tertiary-container text-on-tertiary-container flex items-center justify-center mb-6">
+<span class="material-symbols-outlined">chat</span>
+</div>
+<h3 class="font-headline-md text-[20px] font-semibold text-on-surface mb-2">Intégration WhatsApp</h3>
+<p class="font-body-md text-body-md text-on-surface-variant">
+                                Relancez vos clients en un clic sur WhatsApp, leur canal préféré. Le document PDF est prêt à être joint à la conversation.
+                            </p>
+</div>
+</div>
+<!-- Feature 4: Large -->
+<div class="lg:col-span-2 bg-surface-container-lowest rounded-xl p-8 border border-outline-variant/30 shadow-level-1 flex flex-col justify-between overflow-hidden relative hover:shadow-level-2 transition-shadow">
+<div class="relative z-10 w-full md:w-1/2">
+<div class="w-12 h-12 rounded bg-surface-container-highest text-on-surface flex items-center justify-center mb-6">
+<span class="material-symbols-outlined">monitoring</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-2">Trésorerie en Temps Réel</h3>
+<p class="font-body-md text-body-md text-on-surface-variant">
+                                Un tableau de bord clair qui connecte vos factures à vos comptes. Anticipez les creux et prenez de meilleures décisions.
+                            </p>
+</div>
+<!-- Abstract chart representation -->
+<div class="absolute right-0 bottom-0 w-1/2 h-full hidden md:flex items-end justify-end p-6 opacity-80">
+<div class="flex items-end gap-2 h-32">
+<div class="w-8 bg-surface-container-highest rounded-t h-12"></div>
+<div class="w-8 bg-surface-dim rounded-t h-20"></div>
+<div class="w-8 bg-tertiary-fixed rounded-t h-16"></div>
+<div class="w-8 bg-primary-fixed-dim rounded-t h-28 relative">
+<div class="absolute -top-3 -right-2 w-3 h-3 rounded-full bg-primary"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- How it works -->
+<section class="py-24 bg-surface-container-low border-y border-outline-variant/20" id="comment-ca-marche">
+<div class="max-w-container-max mx-auto px-margin-desktop">
+<div class="text-center mb-16">
+<h2 class="font-headline-lg text-headline-lg text-on-surface mb-4 reveal">Prêt en 3 étapes simples</h2>
+</div>
+<div class="flex flex-col md:flex-row gap-8 relative">
+<!-- Connecting line (desktop) -->
+<div class="hidden md:block absolute top-12 left-24 right-24 h-0.5 bg-outline-variant/30 -z-10"></div>
+<!-- Step 1 -->
+<div class="flex-1 flex flex-col items-center text-center relative z-10 reveal">
+<div class="w-16 h-16 rounded-full bg-surface-container-lowest border-2 border-primary text-primary font-headline-md text-headline-md flex items-center justify-center mb-6 shadow-sm">
+                            1
+                        </div>
+<h3 class="font-headline-md text-[20px] font-semibold text-on-surface mb-2">Inscrivez-vous</h3>
+<p class="font-body-md text-body-md text-on-surface-variant">Créez votre compte gratuitement en moins d'une minute avec votre email.</p>
+</div>
+<!-- Step 2 -->
+<div class="flex-1 flex flex-col items-center text-center relative z-10 reveal">
+<div class="w-16 h-16 rounded-full bg-surface-container-lowest border-2 border-primary text-primary font-headline-md text-headline-md flex items-center justify-center mb-6 shadow-sm">
+                            2
+                        </div>
+<h3 class="font-headline-md text-[20px] font-semibold text-on-surface mb-2">Paramétrez</h3>
+<p class="font-body-md text-body-md text-on-surface-variant">Ajoutez votre logo, vos infos légales et importez votre base clients.</p>
+</div>
+<!-- Step 3 -->
+<div class="flex-1 flex flex-col items-center text-center relative z-10 reveal">
+<div class="w-16 h-16 rounded-full bg-primary text-on-primary font-headline-md text-headline-md flex items-center justify-center mb-6 shadow-md">
+                            3
+                        </div>
+<h3 class="font-headline-md text-[20px] font-semibold text-on-surface mb-2">Respirez</h3>
+<p class="font-body-md text-body-md text-on-surface-variant">Éditez vos premiers documents et laissez l'outil automatiser le reste.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Pricing Section -->
+<section class="py-32 bg-surface" id="tarifs">
+<div class="max-w-container-max mx-auto px-margin-desktop">
+<div class="text-center mb-16">
+<h2 class="font-headline-lg text-headline-lg text-on-surface mb-4 reveal">Des tarifs transparents, sans surprise</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl mx-auto">
+                        Choisissez le plan qui correspond à la taille de votre ambition.
+                    </p>
+</div>
+<div class="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto items-center">
+<!-- Free Plan -->
+<div class="bg-surface-container-lowest rounded-xl p-8 border border-outline-variant/30 shadow-level-1">
+<h3 class="font-headline-md text-[20px] font-semibold text-on-surface mb-2">Démarrage</h3>
+<div class="flex items-baseline gap-1 mb-6">
+<span class="font-headline-xl text-headline-xl text-on-surface">0</span>
+<span class="font-label-numeric text-label-numeric text-on-surface-variant">FCFA / mois</span>
+</div>
+<ul class="space-y-4 mb-8">
+<li class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary text-xl">check_circle</span>
+<span class="font-body-sm text-body-sm text-on-surface">5 clients maximum</span>
+</li>
+<li class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary text-xl">check_circle</span>
+<span class="font-body-sm text-body-sm text-on-surface">Factures &amp; Devis illimités</span>
+</li>
+<li class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary text-xl">check_circle</span>
+<span class="font-body-sm text-body-sm text-on-surface">Support par email</span>
+</li>
+</ul>
+<a class="block w-full text-center font-body-md text-body-md font-semibold text-primary border border-primary px-4 py-3 rounded-lg hover:bg-primary-container hover:text-on-primary-container transition-colors" href="/login?mode=signup">
+                            Commencer
+                        </a>
+</div>
+<!-- Pro Plan (Highlighted) -->
+<div class="bg-surface-container-lowest rounded-xl p-8 border-2 border-primary shadow-level-2 relative transform md:-translate-y-4 z-10">
+<div class="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-primary text-on-primary text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full">
+                            Recommandé
+                        </div>
+<h3 class="font-headline-md text-[20px] font-semibold text-on-surface mb-2">Professionnel</h3>
+<div class="flex items-baseline gap-1 mb-6">
+<span class="font-headline-xl text-headline-xl text-on-surface">9 000</span>
+<span class="font-label-numeric text-label-numeric text-on-surface-variant">FCFA / mois</span>
+</div>
+<ul class="space-y-4 mb-8">
+<li class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary text-xl">check_circle</span>
+<span class="font-body-sm text-body-sm text-on-surface">Clients illimités</span>
+</li>
+<li class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary text-xl">check_circle</span>
+<span class="font-body-sm text-body-sm text-on-surface">Relances automatiques</span>
+</li>
+<li class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary text-xl">check_circle</span>
+<span class="font-body-sm text-body-sm text-on-surface">Envoi via WhatsApp</span>
+</li>
+<li class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary text-xl">check_circle</span>
+<span class="font-body-sm text-body-sm text-on-surface">Tableau de bord trésorerie</span>
+</li>
+</ul>
+<a class="block w-full text-center font-body-md text-body-md font-bold bg-primary text-on-primary px-4 py-3 rounded-lg hover:opacity-90 transition-opacity" href="/login?mode=signup">
+                            Essai gratuit 14 jours
+                        </a>
+</div>
+<!-- Business Plan -->
+<div class="bg-surface-container-lowest rounded-xl p-8 border border-outline-variant/30 shadow-level-1">
+<h3 class="font-headline-md text-[20px] font-semibold text-on-surface mb-2">Business</h3>
+<div class="flex items-baseline gap-1 mb-6">
+<span class="font-headline-xl text-headline-xl text-on-surface">15 000</span>
+<span class="font-label-numeric text-label-numeric text-on-surface-variant">FCFA / mois</span>
+</div>
+<ul class="space-y-4 mb-8">
+<li class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary text-xl">check_circle</span>
+<span class="font-body-sm text-body-sm text-on-surface">Tout du plan Pro</span>
+</li>
+<li class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary text-xl">check_circle</span>
+<span class="font-body-sm text-body-sm text-on-surface">Multi-utilisateurs (jusqu'à 5)</span>
+</li>
+<li class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary text-xl">check_circle</span>
+<span class="font-body-sm text-body-sm text-on-surface">Accès Comptable dédié</span>
+</li>
+<li class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary text-xl">check_circle</span>
+<span class="font-body-sm text-body-sm text-on-surface">Support prioritaire WhatsApp</span>
+</li>
+</ul>
+<a class="block w-full text-center font-body-md text-body-md font-semibold text-on-surface border border-outline-variant px-4 py-3 rounded-lg hover:bg-surface-container transition-colors" href="#">
+                            Contacter les ventes
+                        </a>
+</div>
+</div>
+</div>
+</section>
+<!-- Testimonials -->
+<section class="py-24 bg-surface-container-low border-y border-outline-variant/20" id="temoignages">
+<div class="max-w-container-max mx-auto px-margin-desktop">
+<div class="text-center mb-16">
+<h2 class="font-headline-lg text-headline-lg text-on-surface mb-4 reveal">Ils construisent leur succès avec NafaFlow</h2>
+</div>
+<div class="grid md:grid-cols-3 gap-6">
+<!-- Quote 1 -->
+<div class="bg-surface-container-lowest p-6 rounded-xl border border-outline-variant/30 shadow-level-1 reveal relative overflow-hidden hover:-translate-y-1 hover:shadow-level-2 transition-all duration-300">
+<span class="absolute -top-4 right-4 font-headline-xl text-[110px] leading-none text-primary/10 select-none pointer-events-none">”</span>
+<div class="flex gap-1 text-primary mb-4 relative">
+<span class="material-symbols-outlined filled text-sm">star</span>
+<span class="material-symbols-outlined filled text-sm">star</span>
+<span class="material-symbols-outlined filled text-sm">star</span>
+<span class="material-symbols-outlined filled text-sm">star</span>
+<span class="material-symbols-outlined filled text-sm">star</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface italic mb-6">"Enfin un outil adapté à notre réalité au Sénégal. L'envoi des factures sur WhatsApp a réduit mes délais de paiement de moitié."</p>
+<div class="flex items-center gap-3">
+<div class="w-11 h-11 rounded-full bg-gradient-to-br from-[#16A34A] to-[#0F3E2B] flex items-center justify-center font-bold text-white shadow-sm">A</div>
+<div>
+<p class="font-body-sm text-body-sm font-semibold text-on-surface">Aminata D.</p>
+<p class="font-body-sm text-[12px] text-on-surface-variant">Agence Marketing, Dakar</p>
+</div>
+</div>
+</div>
+<!-- Quote 2 -->
+<div class="bg-surface-container-lowest p-6 rounded-xl border border-outline-variant/30 shadow-level-1 reveal relative overflow-hidden hover:-translate-y-1 hover:shadow-level-2 transition-all duration-300">
+<span class="absolute -top-4 right-4 font-headline-xl text-[110px] leading-none text-primary/10 select-none pointer-events-none">”</span>
+<div class="flex gap-1 text-primary mb-4 relative">
+<span class="material-symbols-outlined filled text-sm">star</span>
+<span class="material-symbols-outlined filled text-sm">star</span>
+<span class="material-symbols-outlined filled text-sm">star</span>
+<span class="material-symbols-outlined filled text-sm">star</span>
+<span class="material-symbols-outlined filled text-sm">star</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface italic mb-6">"Je perdais un temps fou sur Excel. NafaFlow est clair, rapide, et le tableau de bord me permet de savoir exactement où j'en suis."</p>
+<div class="flex items-center gap-3">
+<div class="w-11 h-11 rounded-full bg-gradient-to-br from-[#16A34A] to-[#0F3E2B] flex items-center justify-center font-bold text-white shadow-sm">M</div>
+<div>
+<p class="font-body-sm text-body-sm font-semibold text-on-surface">Moussa N.</p>
+<p class="font-body-sm text-[12px] text-on-surface-variant">Consultant IT, Thiès</p>
+</div>
+</div>
+</div>
+<!-- Quote 3 -->
+<div class="bg-surface-container-lowest p-6 rounded-xl border border-outline-variant/30 shadow-level-1 reveal relative overflow-hidden hover:-translate-y-1 hover:shadow-level-2 transition-all duration-300">
+<span class="absolute -top-4 right-4 font-headline-xl text-[110px] leading-none text-primary/10 select-none pointer-events-none">”</span>
+<div class="flex gap-1 text-primary mb-4 relative">
+<span class="material-symbols-outlined filled text-sm">star</span>
+<span class="material-symbols-outlined filled text-sm">star</span>
+<span class="material-symbols-outlined filled text-sm">star</span>
+<span class="material-symbols-outlined filled text-sm">star</span>
+<span class="material-symbols-outlined filled text-sm">star</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface italic mb-6">"Le suivi de la TVA était mon cauchemar. Maintenant, je donne juste un accès à mon comptable et tout est automatisé. Un soulagement."</p>
+<div class="flex items-center gap-3">
+<div class="w-11 h-11 rounded-full bg-gradient-to-br from-[#16A34A] to-[#0F3E2B] flex items-center justify-center font-bold text-white shadow-sm">F</div>
+<div>
+<p class="font-body-sm text-body-sm font-semibold text-on-surface">Fatou S.</p>
+<p class="font-body-sm text-[12px] text-on-surface-variant">Boutique e-commerce</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Final CTA -->
+<section class="py-24 bg-surface">
+<div class="max-w-4xl mx-auto px-margin-desktop">
+<div class="bg-primary text-on-primary rounded-2xl p-12 text-center shadow-level-2 relative overflow-hidden">
+<div class="absolute top-0 left-0 w-full h-full opacity-10 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-white via-transparent to-transparent"></div>
+<div class="relative z-10">
+<h2 class="font-headline-lg text-headline-lg mb-4">Prêt à transformer votre gestion ?</h2>
+<p class="font-body-lg text-body-lg opacity-90 mb-8 max-w-xl mx-auto">
+                            Rejoignez les entrepreneurs qui ont choisi la clarté et l'efficacité avec NafaFlow. Sans engagement, annulez quand vous voulez.
+                        </p>
+<a class="inline-flex justify-center items-center font-body-md text-body-md font-bold bg-surface-container-lowest text-primary px-8 py-4 rounded-lg hover:bg-surface transition-colors shadow-sm" href="/login?mode=signup">
+                            Commencer mon essai gratuit
+                        </a>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="full-width bottom-0 bg-surface-container-lowest dark:bg-inverse-surface border-t border-outline-variant/20">
+<div class="flex flex-col md:flex-row justify-between items-center w-full px-margin-desktop max-w-container-max mx-auto py-stack-lg gap-gutter">
+<!-- Brand & Copyright -->
+<div class="flex flex-col items-center md:items-start gap-2">
+<div class="flex items-center gap-2">
+<img alt="Logo NafaFlow" class="h-6 w-6 rounded" src="/logo-icon.png"/>
+<span class="font-headline-md text-headline-md font-bold text-on-surface dark:text-inverse-on-surface tracking-tight">NafaFlow</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">© 2026 NafaFlow — un produit <a href="https://andvisionagency.com" target="_blank" rel="noopener" class="font-semibold text-primary hover:underline underline-offset-2">AND VISION AGENCY</a>. Simplifier la finance pour les entrepreneurs du Sénégal.</p>
+</div>
+<!-- Links -->
+<div class="flex flex-wrap justify-center gap-6">
+<a class="font-label-numeric text-label-numeric text-on-surface-variant hover:text-primary transition-colors" href="#">Sécurité</a>
+<a class="font-label-numeric text-label-numeric text-on-surface-variant hover:text-primary transition-colors" href="#">Confidentialité</a>
+<!-- <a class="font-label-numeric text-label-numeric text-on-surface-variant hover:text-primary transition-colors" href="#">Conditions d'utilisation</a> -->
+<a class="font-label-numeric text-label-numeric text-on-surface-variant hover:text-primary transition-colors" href="#">Contact</a>
+</div>
+</div>
+</footer>
+<script>
+  (function () {
+    var els = document.querySelectorAll('.reveal');
+    if (!('IntersectionObserver' in window) || !els.length) {
+      els.forEach(function (el) { el.classList.add('is-visible'); });
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          io.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+    els.forEach(function (el) { io.observe(el); });
+  })();
+</script>
+</body></html>
