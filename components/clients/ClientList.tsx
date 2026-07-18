@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogTrigger } from "@/components/ui/dialog";
-import { Search, Plus, Eye, Trash2, Edit2, Phone, Mail } from "lucide-react";
+import { Search, Plus, Eye, Trash2, Edit2, Phone, Mail, Download, Upload } from "lucide-react";
 import ClientForm from "./ClientForm";
 import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
+import { buildCsv, downloadCsv, parseCsv } from "@/lib/utils/csv";
 
 export interface ClientItem {
   id: string;
@@ -42,7 +43,9 @@ export default function ClientList() {
   const [search, setSearch] = useState("");
   const [editingClient, setEditingClient] = useState<ClientItem | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Delete candidate state
   const [deleteCandidate, setDeleteCandidate] = useState<string | null>(null);
 
@@ -223,6 +226,117 @@ export default function ClientList() {
     }
   };
 
+  // CSV Export
+  const handleExportCSV = () => {
+    const csv = buildCsv(
+      [
+        { key: "name", header: "Nom" },
+        { key: "sector", header: "Secteur" },
+        { key: "email", header: "Email" },
+        { key: "phone", header: "WhatsApp" },
+        { key: "address", header: "Adresse" },
+        { key: "ninea", header: "NINEA" },
+        { key: "rc", header: "RC" },
+      ],
+      clients.map((c) => ({
+        name: c.name,
+        sector: c.sector,
+        email: c.email,
+        phone: c.phone,
+        address: c.address,
+        ninea: c.ninea,
+        rc: c.rc,
+      }))
+    );
+    downloadCsv(`clients_${new Date().toISOString().slice(0, 10)}.csv`, csv);
+    toast.success("Export CSV lancé !");
+  };
+
+  // CSV Import
+  const handleImportClick = () => fileInputRef.current?.click();
+
+  const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (e.target) e.target.value = "";
+    if (!file) return;
+
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const rows = parseCsv(text);
+      if (rows.length === 0) {
+        toast.error("Fichier CSV vide ou invalide.");
+        return;
+      }
+
+      const supabase = createBrowserClient();
+      let activeOrgId = orgId;
+      if (!activeOrgId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: userData } = await supabase
+            .schema("nafaflow")
+            .from("users")
+            .select("org_id")
+            .eq("id", user.id)
+            .maybeSingle();
+          activeOrgId = userData?.org_id || null;
+          if (activeOrgId) setOrgId(activeOrgId);
+        }
+      }
+      if (!activeOrgId) {
+        toast.error("Import impossible : organisation introuvable.");
+        return;
+      }
+
+      const pick = (row: Record<string, string>, keys: string[]) => {
+        for (const k of Object.keys(row)) {
+          const norm = k.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+          if (keys.includes(norm)) return row[k];
+        }
+        return "";
+      };
+
+      const toInsert = rows
+        .map((row) => {
+          const name = pick(row, ["nom", "name", "client", "raison sociale", "client / raison sociale"]).trim();
+          if (!name) return null;
+          const ninea = pick(row, ["ninea"]).trim();
+          const rc = pick(row, ["rc", "registre de commerce"]).trim();
+          return {
+            org_id: activeOrgId,
+            name,
+            email: pick(row, ["email", "e-mail", "mail", "courriel"]).trim() || null,
+            whatsapp: pick(row, ["whatsapp", "telephone", "téléphone", "tel", "phone", "numero"]).trim() || null,
+            sector: pick(row, ["secteur", "sector"]).trim() || "Technologie",
+            address: pick(row, ["adresse", "address"]).trim() || null,
+            tax_id: `${ninea}|${rc}`,
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null);
+
+      if (toInsert.length === 0) {
+        toast.error("Aucune ligne valide trouvée (colonne « Nom » requise).");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .schema("nafaflow")
+        .from("clients")
+        .insert(toInsert)
+        .select();
+
+      if (error) throw error;
+
+      await loadClients();
+      toast.success(`${data?.length || toInsert.length} client(s) importé(s) avec succès.`);
+    } catch (err: unknown) {
+      toast.error("Erreur lors de l'import : " + formatError(err));
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const filteredClients = clients.filter(
     (c) =>
       c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -246,17 +360,50 @@ export default function ClientList() {
           />
         </div>
 
-        {/* Add Trigger Modal */}
-        <Dialog open={isFormOpen} onOpenChange={(open) => {
-          setIsFormOpen(open);
-          if (!open) setEditingClient(null);
-        }}>
-          <DialogTrigger asChild>
-            <Button className="bg-[#16A34A] hover:bg-[#15803D] text-white font-semibold h-9 rounded-lg flex items-center gap-1.5 active:scale-95 transition-all self-end sm:self-auto shadow-md shadow-emerald-700/10">
-              <Plus className="h-4 w-4" />
-              <span>Nouveau client</span>
-            </Button>
-          </DialogTrigger>
+        <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto">
+          {/* Hidden file input for import */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={handleImportCSV}
+            className="hidden"
+          />
+
+          {/* Import Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleImportClick}
+            disabled={importing}
+            className="bg-white hover:bg-slate-50 text-slate-600 font-semibold border-slate-200 h-9 rounded-lg flex items-center gap-1.5 active:scale-95 transition-all disabled:opacity-60"
+          >
+            <Upload className="h-4 w-4" />
+            <span>{importing ? "Import..." : "Importer"}</span>
+          </Button>
+
+          {/* Export Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportCSV}
+            className="bg-white hover:bg-slate-50 text-slate-600 font-semibold border-slate-200 h-9 rounded-lg flex items-center gap-1.5 active:scale-95 transition-all"
+          >
+            <Download className="h-4 w-4" />
+            <span>Exporter</span>
+          </Button>
+
+          {/* Add Trigger Modal */}
+          <Dialog open={isFormOpen} onOpenChange={(open) => {
+            setIsFormOpen(open);
+            if (!open) setEditingClient(null);
+          }}>
+            <DialogTrigger asChild>
+              <Button className="bg-[#16A34A] hover:bg-[#15803D] text-white font-semibold h-9 rounded-lg flex items-center gap-1.5 active:scale-95 transition-all shadow-md shadow-emerald-700/10">
+                <Plus className="h-4 w-4" />
+                <span>Nouveau client</span>
+              </Button>
+            </DialogTrigger>
           <ClientForm
             client={editingClient}
             onSave={handleSave}
@@ -265,7 +412,8 @@ export default function ClientList() {
               setEditingClient(null);
             }}
           />
-        </Dialog>
+          </Dialog>
+        </div>
       </div>
 
       {/* Directory Table */}

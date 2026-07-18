@@ -1,17 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogTrigger } from "@/components/ui/dialog";
-import { Edit2, Trash2, Download, Search, Plus } from "lucide-react";
+import { Edit2, Trash2, Download, Upload, Search, Plus } from "lucide-react";
 import AmountFCFA from "@/components/shared/AmountFCFA";
 import ServiceForm from "./ServiceForm";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createBrowserClient } from "@/lib/supabase/client";
+import { buildCsv, downloadCsv, parseCsv } from "@/lib/utils/csv";
 
 export interface ServiceItem {
   id: string;
@@ -43,6 +44,8 @@ export default function ServiceList() {
   const [categoryFilter, setCategoryFilter] = useState("Tous");
   const [editingService, setEditingService] = useState<ServiceItem | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch user org_id and services list
   const loadData = async () => {
@@ -265,25 +268,115 @@ export default function ServiceList() {
 
   // CSV Export
   const handleExportCSV = () => {
-    const headers = "ID,Nom,Categorie,Prix,Recurrent,Statut\n";
-    const rows = services
-      .map(
-        (s) =>
-          `"${s.id}","${s.name}","${s.category}",${s.price},"${
-            s.isRecurrent ? "Oui" : "Non"
-          }","${s.isActive ? "Actif" : "Inactif"}"`
-      )
-      .join("\n");
-
-    const blob = new Blob([headers + rows], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `catalogue_tarifs_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const csv = buildCsv(
+      [
+        { key: "name", header: "Nom" },
+        { key: "category", header: "Categorie" },
+        { key: "price", header: "Prix" },
+        { key: "recurrent", header: "Recurrent" },
+        { key: "statut", header: "Statut" },
+        { key: "inclus", header: "Inclus" },
+      ],
+      services.map((s) => ({
+        name: s.name,
+        category: s.category,
+        price: s.price,
+        recurrent: s.isRecurrent ? "Oui" : "Non",
+        statut: s.isActive ? "Actif" : "Inactif",
+        inclus: s.included.join(" ; "),
+      }))
+    );
+    downloadCsv(`catalogue_tarifs_${new Date().toISOString().slice(0, 10)}.csv`, csv);
     toast.success("Export CSV lancé !");
+  };
+
+  // CSV Import
+  const handleImportClick = () => fileInputRef.current?.click();
+
+  const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (e.target) e.target.value = ""; // permet de réimporter le même fichier
+    if (!file) return;
+
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const rows = parseCsv(text);
+      if (rows.length === 0) {
+        toast.error("Fichier CSV vide ou invalide.");
+        return;
+      }
+
+      // Résout l'org_id
+      const supabase = createBrowserClient();
+      let activeOrgId = orgId;
+      if (!activeOrgId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: userData } = await supabase
+            .schema("nafaflow")
+            .from("users")
+            .select("org_id")
+            .eq("id", user.id)
+            .maybeSingle();
+          activeOrgId = userData?.org_id || null;
+          if (activeOrgId) setOrgId(activeOrgId);
+        }
+      }
+      if (!activeOrgId) {
+        toast.error("Import impossible : organisation introuvable.");
+        return;
+      }
+
+      // Colonnes tolérantes (accents / casse)
+      const pick = (row: Record<string, string>, keys: string[]) => {
+        for (const k of Object.keys(row)) {
+          const norm = k.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+          if (keys.includes(norm)) return row[k];
+        }
+        return "";
+      };
+
+      const toInsert = rows
+        .map((row) => {
+          const name = pick(row, ["nom", "name", "service", "service / nom"]).trim();
+          if (!name) return null;
+          const priceRaw = pick(row, ["prix", "price", "prix unitaire", "montant"]).replace(/[^\d.,-]/g, "").replace(",", ".");
+          const recurrent = pick(row, ["recurrent", "récurrent"]).toLowerCase();
+          const statut = pick(row, ["statut", "status", "actif"]).toLowerCase();
+          const inclus = pick(row, ["inclus", "included"]);
+          return {
+            org_id: activeOrgId,
+            name,
+            category: pick(row, ["categorie", "category", "catégorie"]).trim() || "Développement",
+            price: Math.round(Number(priceRaw) || 0),
+            is_recurring: recurrent === "oui" || recurrent === "yes" || recurrent === "true",
+            active: statut === "" ? true : !(statut === "inactif" || statut === "non" || statut === "false"),
+            inclus: inclus ? inclus.split(/[;\n]/).map((x) => x.trim()).filter(Boolean).join("\n") : null,
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null);
+
+      if (toInsert.length === 0) {
+        toast.error("Aucune ligne valide trouvée (colonne « Nom » requise).");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .schema("nafaflow")
+        .from("services")
+        .insert(toInsert)
+        .select();
+
+      if (error) throw error;
+
+      await loadData();
+      toast.success(`${data?.length || toInsert.length} service(s) importé(s) avec succès.`);
+    } catch (err: unknown) {
+      toast.error("Erreur lors de l'import : " + formatError(err));
+    } finally {
+      setImporting(false);
+    }
   };
 
   const filteredServices = services.filter((s) => {
@@ -326,6 +419,27 @@ export default function ServiceList() {
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
+          {/* Hidden file input for import */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={handleImportCSV}
+            className="hidden"
+          />
+
+          {/* Import Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleImportClick}
+            disabled={importing}
+            className="bg-white hover:bg-slate-50 text-slate-600 font-semibold border-slate-200 h-9 rounded-lg flex items-center gap-1.5 active:scale-95 transition-all disabled:opacity-60"
+          >
+            <Upload className="h-4 w-4" />
+            <span>{importing ? "Import..." : "Importer CSV"}</span>
+          </Button>
+
           {/* Export Button */}
           <Button
             variant="outline"
