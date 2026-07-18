@@ -12,8 +12,9 @@ import ConvertToInvoicesModal from "./ConvertToInvoicesModal";
 import { Dialog } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { ClientItem, DevisItem } from "@/lib/utils/state";
-import { fetchOrgSettings, OrgSettings } from "@/lib/utils/orgProfile";
+import { fetchOrgSettings, OrgSettings, errorMessage } from "@/lib/utils/orgProfile";
 import { createBrowserClient } from "@/lib/supabase/client";
+import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { useRouter, useSearchParams } from "next/navigation";
 import { generateDocumentPDF } from "@/lib/utils/pdf";
 import { Label } from "@/components/ui/label";
@@ -91,9 +92,10 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
         if (linesErr) throw linesErr;
 
         const mappedLines: DevisLine[] = (linesData || []).map((l) => {
-          const line = l as { id: string; description?: string | null; qty?: number | null; unit_price?: number | null };
+          const line = l as { id: string; service_id?: string | null; description?: string | null; qty?: number | null; unit_price?: number | null };
           return {
             id: line.id,
+            serviceId: line.service_id || null,
             description: line.description || "",
             quantity: Number(line.qty) || 1,
             unitPrice: Math.round(Number(line.unit_price)) || 0,
@@ -123,7 +125,7 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
       }
     } catch (err: unknown) {
       console.error(err);
-      const message = err instanceof Error ? err.message : String(err);
+      const message = errorMessage(err);
       toast.error(`Erreur lors du chargement : ${message}`);
     } finally {
       setLoading(false);
@@ -148,6 +150,15 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
       setEditLines(quote.lines || []);
     }
   }, [quote]);
+
+  // Avertir avant de quitter en mode édition si des changements ne sont pas enregistrés
+  const isDirtyEdit = quoteId === "modifier" && !!quote && (
+    editClient !== quote.clientId ||
+    editIssueDate !== quote.issueDate ||
+    String(editValidityDays) !== String(quote.validityDays ?? 15) ||
+    JSON.stringify(editLines) !== JSON.stringify(quote.lines || [])
+  );
+  useUnsavedChanges(isDirtyEdit);
 
   const handleDownloadPDF = async () => {
     if (!quote) return;
@@ -212,19 +223,15 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
 
       if (deleteLinesErr) throw deleteLinesErr;
 
-      // Insert new lines
-      const linesToInsert = editLines.map((line) => {
-        // Check if catalog ID (uuid-like or starting with S-)
-        const isCatalogService = line.id && (line.id.startsWith("S-") || line.id.length > 20);
-        return {
-          quote_id: quote.id,
-          service_id: isCatalogService ? line.id : null,
-          description: line.description,
-          qty: line.quantity,
-          unit_price: Math.round(line.unitPrice),
-          total: Math.round(line.quantity * line.unitPrice),
-        };
-      });
+      // Insert new lines (service_id vient du champ serviceId, jamais de l'id de ligne)
+      const linesToInsert = editLines.map((line) => ({
+        quote_id: quote.id,
+        service_id: line.serviceId || null,
+        description: line.description,
+        qty: line.quantity,
+        unit_price: Math.round(line.unitPrice),
+        total: Math.round(line.quantity * line.unitPrice),
+      }));
 
       const { error: insertLinesErr } = await supabase
         .schema("nafaflow")
@@ -237,7 +244,7 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
       router.push(`/devis/${quote.id}`);
     } catch (err: unknown) {
       console.error(err);
-      const message = err instanceof Error ? err.message : String(err);
+      const message = errorMessage(err);
       toast.error(`Erreur lors de la sauvegarde : ${message}`);
     }
   };
@@ -259,7 +266,7 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
       loadData();
     } catch (err: unknown) {
       console.error(err);
-      const message = err instanceof Error ? err.message : String(err);
+      const message = errorMessage(err);
       toast.error(`Erreur lors de l'acceptation : ${message}`);
     }
   };

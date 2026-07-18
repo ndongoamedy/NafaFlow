@@ -7,13 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Save, Send, ShieldAlert, ArrowRightLeft, UserPlus } from "lucide-react";
+import { Save, Send, ShieldAlert, UserPlus } from "lucide-react";
 import DevisLineEditor, { DevisLine } from "./DevisLineEditor";
-import ConvertToInvoicesModal from "./ConvertToInvoicesModal";
 import { toast } from "sonner";
 import { ClientItem } from "@/lib/utils/state";
-import { fetchOrgSettings, OrgSettings } from "@/lib/utils/orgProfile";
+import { fetchOrgSettings, OrgSettings, errorMessage } from "@/lib/utils/orgProfile";
 import { createBrowserClient } from "@/lib/supabase/client";
+import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 
 export default function DevisForm() {
   const router = useRouter();
@@ -88,15 +88,8 @@ export default function DevisForm() {
   const [issueDate, setIssueDate] = useState(new Date().toISOString().slice(0, 10));
   const [validityDays, setValidityDays] = useState("15");
   const [lines, setLines] = useState<DevisLine[]>([
-    {
-      id: "1",
-      description: "Développement Application Web (Next.js)",
-      quantity: 1,
-      unitPrice: 3500000,
-    },
+    { id: "1", serviceId: null, description: "", quantity: 1, unitPrice: 0 },
   ]);
-  
-  const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
   
   // New Client Inline Modal
   const [isNewClientOpen, setIsNewClientOpen] = useState(false);
@@ -109,6 +102,10 @@ export default function DevisForm() {
   const vatRate = settings?.billing.vat ?? 18;
   const subtotal = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
   const totalTTC = applyVat ? subtotal * (1 + vatRate / 100) : subtotal;
+
+  // Avertir avant de quitter si des prestations ont été saisies
+  const [saved, setSaved] = useState(false);
+  useUnsavedChanges(!saved && lines.some((l) => l.description.trim() !== "" || l.unitPrice > 0));
 
   const handleClientSelectChange = (val: string) => {
     if (val === "new_client") {
@@ -198,7 +195,7 @@ export default function DevisForm() {
   };
 
   const saveQuoteToDb = async (frontendStatus: string) => {
-    if (lines.length === 0) {
+    if (lines.filter((l) => l.description.trim() !== "").length === 0) {
       toast.error("Veuillez ajouter au moins une prestation.");
       return;
     }
@@ -265,19 +262,18 @@ export default function DevisForm() {
       if (quoteInsertErr) throw quoteInsertErr;
       if (!quoteResult) throw new Error("Le devis n'a pas pu être créé.");
 
-      // 2. Insert quote lines
+      // 2. Insert quote lines (service_id vient de serviceId, jamais de l'id de ligne)
       const quoteId = quoteResult.id;
-      const linesToInsert = lines.map((line) => {
-        const isCatalogService = line.id && (line.id.startsWith("S-") || line.id.length > 20);
-        return {
+      const linesToInsert = lines
+        .filter((line) => line.description.trim() !== "")
+        .map((line) => ({
           quote_id: quoteId,
-          service_id: isCatalogService ? line.id : null,
+          service_id: line.serviceId || null,
           description: line.description,
           qty: line.quantity,
           unit_price: Math.round(line.unitPrice),
           total: Math.round(line.quantity * line.unitPrice),
-        };
-      });
+        }));
 
       const { error: linesInsertErr } = await supabase
         .schema("nafaflow")
@@ -287,11 +283,11 @@ export default function DevisForm() {
       if (linesInsertErr) throw linesInsertErr;
 
       toast.success(frontendStatus === "brouillon" ? "Brouillon du devis sauvegardé avec succès." : "Devis envoyé au client par e-mail.");
+      setSaved(true);
       router.push("/devis");
     } catch (err: unknown) {
       console.error(err);
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`Erreur lors de l'enregistrement : ${message}`);
+      toast.error(`Erreur lors de l'enregistrement : ${errorMessage(err)}`);
     }
   };
 
@@ -301,10 +297,6 @@ export default function DevisForm() {
 
   const handleSend = () => {
     saveQuoteToDb("envoyée");
-  };
-
-  const handleConvertSuccess = () => {
-    router.push("/factures");
   };
 
   if (loading) {
@@ -322,21 +314,34 @@ export default function DevisForm() {
               <Label htmlFor="client" className="text-xs font-bold text-slate-500 uppercase">
                 Client
               </Label>
-              <select
-                id="client"
-                value={client}
-                onChange={(e) => handleClientSelectChange(e.target.value)}
-                className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:border-[#16A34A] focus:ring-1 focus:ring-[#16A34A] text-slate-700 font-semibold"
-              >
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-                <option value="new_client" className="text-[#16A34A] font-bold bg-[#F0FDF4]">
-                  + Nouveau client...
-                </option>
-              </select>
+              <div className="flex gap-2">
+                <select
+                  id="client"
+                  value={client}
+                  onChange={(e) => handleClientSelectChange(e.target.value)}
+                  className="flex-1 h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:border-[#16A34A] focus:ring-1 focus:ring-[#16A34A] text-slate-700 font-semibold"
+                >
+                  {clients.length === 0 && <option value="">Aucun client — créez-en un →</option>}
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                  {clients.length > 0 && (
+                    <option value="new_client" className="text-[#16A34A] font-bold bg-[#F0FDF4]">
+                      + Nouveau client...
+                    </option>
+                  )}
+                </select>
+                <Button
+                  type="button"
+                  onClick={() => setIsNewClientOpen(true)}
+                  title="Nouveau client"
+                  className="h-10 w-10 shrink-0 bg-[#F0FDF4] hover:bg-emerald-100 text-[#16A34A] border border-[#16A34A]/20 rounded-lg flex items-center justify-center"
+                >
+                  <UserPlus className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
 
             {/* Issue Date */}
@@ -378,7 +383,7 @@ export default function DevisForm() {
         {/* Warning Banner */}
         <span className="text-xs text-slate-400 font-medium flex items-center gap-1.5">
           <ShieldAlert className="h-4.5 w-4.5 text-slate-300" />
-          Assurez-vous de vérifier les lignes de calcul de TVA (18%) avant de convertir.
+          Une fois le devis enregistré, vous pourrez le convertir en facture depuis sa fiche.
         </span>
 
         <div className="flex items-center gap-3 shrink-0 self-end">
@@ -393,23 +398,6 @@ export default function DevisForm() {
             <span>Sauvegarder brouillon</span>
           </Button>
 
-          {/* Conversion Button */}
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              if (lines.length === 0 || totalTTC === 0) {
-                toast.error("Veuillez d&apos;abord ajouter des prestations.");
-                return;
-              }
-              setIsConvertModalOpen(true);
-            }}
-            className="bg-white hover:bg-slate-50 text-slate-700 font-semibold border-slate-200 h-10 rounded-lg flex items-center gap-1.5 active:scale-95 transition-all text-sm"
-          >
-            <ArrowRightLeft className="h-4 w-4 text-[#16A34A]" />
-            <span>Convertir en factures</span>
-          </Button>
-
           {/* Send Button */}
           <Button
             type="button"
@@ -421,16 +409,6 @@ export default function DevisForm() {
           </Button>
         </div>
       </div>
-
-      {/* Convert to Milestone Invoices Dialog */}
-      <Dialog open={isConvertModalOpen} onOpenChange={setIsConvertModalOpen}>
-        <ConvertToInvoicesModal
-          quoteId="D-2026-Nouveau"
-          quoteTotal={totalTTC}
-          onClose={() => setIsConvertModalOpen(false)}
-          onSuccess={handleConvertSuccess}
-        />
-      </Dialog>
 
       {/* Inline Add Client Dialog */}
       <Dialog open={isNewClientOpen} onOpenChange={setIsNewClientOpen}>

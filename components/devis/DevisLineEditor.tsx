@@ -12,7 +12,8 @@ import { fetchOrgSettings, OrgSettings } from "@/lib/utils/orgProfile";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 export interface DevisLine {
-  id: string;
+  id: string;                    // clé d'affichage uniquement (jamais un service_id)
+  serviceId?: string | null;     // référence catalogue si la ligne vient d'un service
   description: string;
   quantity: number;
   unitPrice: number;
@@ -92,6 +93,7 @@ export default function DevisLineEditor({ lines, onChange }: DevisLineEditorProp
   const addEmptyLine = () => {
     const newLine: DevisLine = {
       id: Date.now().toString(),
+      serviceId: null,
       description: "",
       quantity: 1,
       unitPrice: 0,
@@ -107,6 +109,7 @@ export default function DevisLineEditor({ lines, onChange }: DevisLineEditorProp
   const handleSelectService = (service: ServiceItem) => {
     const newLine: DevisLine = {
       id: Date.now().toString(),
+      serviceId: service.id,   // conserve le lien catalogue (utile au P&L par catégorie)
       description: service.name,
       quantity: 1,
       unitPrice: service.price,

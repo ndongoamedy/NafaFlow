@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import DevisLineEditor, { DevisLine } from "../devis/DevisLineEditor";
 import { formatFCFA, formatDate } from "@/lib/utils/format";
 import { createBrowserClient } from "@/lib/supabase/client";
+import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -174,6 +175,7 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
         // Map database lines to DevisLine structure
         const lines: DevisLine[] = (linesData || []).map((line) => ({
           id: line.id,
+          serviceId: line.service_id || null,
           description: line.description || "",
           quantity: Number(line.qty) || 1,
           unitPrice: Number(line.unit_price) || 0,
@@ -266,6 +268,15 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
       setShouldMarkAsSent(invoice.status === "brouillon");
     }
   }, [invoice]);
+
+  // Avertir avant de quitter en mode édition si des changements ne sont pas enregistrés
+  const isDirtyEdit = invoiceId === "modifier" && !!invoice && (
+    editClient !== invoice.clientId ||
+    editIssueDate !== invoice.issueDate ||
+    editDueDate !== invoice.dueDate ||
+    JSON.stringify(editLines) !== JSON.stringify(invoice.lines || [])
+  );
+  useUnsavedChanges(isDirtyEdit);
 
   const applyVat = settings?.billing?.applyVat ?? true;
   const vatRate = settings?.billing?.vat ?? 18;
@@ -606,9 +617,10 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
 
       if (delLinesErr) throw delLinesErr;
 
-      // 3. Batch insert new lines
+      // 3. Batch insert new lines (préserve le lien catalogue pour le P&L)
       const newLinesRows = editLines.map((line) => ({
         invoice_id: invoice.id,
+        service_id: line.serviceId || null,
         description: line.description,
         qty: line.quantity,
         unit_price: line.unitPrice,

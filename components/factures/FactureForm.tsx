@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { ClientItem } from "@/lib/utils/state";
 import { fetchOrgSettings, OrgSettings, errorMessage } from "@/lib/utils/orgProfile";
 import { createBrowserClient } from "@/lib/supabase/client";
+import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 
 // Création d'une facture directe, sans passer par un devis.
 export default function FactureForm() {
@@ -96,6 +97,10 @@ export default function FactureForm() {
   const subtotal = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
   const vatAmount = applyVat ? Math.round(subtotal * (vatRate / 100)) : 0;
   const totalTTC = subtotal + vatAmount;
+
+  // Avertir avant de quitter si des prestations ont été saisies
+  const [saved, setSaved] = useState(false);
+  useUnsavedChanges(!saved && lines.some((l) => l.description.trim() !== "" || l.unitPrice > 0));
 
   const handleClientSelectChange = (val: string) => {
     if (val === "new_client") {
@@ -211,12 +216,11 @@ export default function FactureForm() {
       if (invErr) throw invErr;
       if (!invoiceResult) throw new Error("La facture n'a pas pu être créée.");
 
-      // 2. Lignes de facture
+      // 2. Lignes de facture (service_id vient de serviceId, jamais de l'id de ligne)
       const linesToInsert = validLines.map((line) => {
-        const isCatalogService = line.id && line.id.length > 20;
         return {
           invoice_id: invoiceResult.id,
-          service_id: isCatalogService ? line.id : null,
+          service_id: line.serviceId || null,
           description: line.description,
           qty: line.quantity,
           unit_price: Math.round(line.unitPrice),
@@ -236,6 +240,7 @@ export default function FactureForm() {
           ? `Facture ${number} créée en brouillon.`
           : `Facture ${number} créée et marquée comme envoyée.`
       );
+      setSaved(true);
       router.push(`/factures/${invoiceResult.id}`);
     } catch (err: unknown) {
       console.error(err);
@@ -260,21 +265,34 @@ export default function FactureForm() {
               <Label htmlFor="client" className="text-xs font-bold text-slate-500 uppercase">
                 Client
               </Label>
-              <select
-                id="client"
-                value={client}
-                onChange={(e) => handleClientSelectChange(e.target.value)}
-                className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:border-[#16A34A] focus:ring-1 focus:ring-[#16A34A] text-slate-700 font-semibold"
-              >
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-                <option value="new_client" className="text-[#16A34A] font-bold bg-[#F0FDF4]">
-                  + Nouveau client...
-                </option>
-              </select>
+              <div className="flex gap-2">
+                <select
+                  id="client"
+                  value={client}
+                  onChange={(e) => handleClientSelectChange(e.target.value)}
+                  className="flex-1 h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:border-[#16A34A] focus:ring-1 focus:ring-[#16A34A] text-slate-700 font-semibold"
+                >
+                  {clients.length === 0 && <option value="">Aucun client — créez-en un →</option>}
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                  {clients.length > 0 && (
+                    <option value="new_client" className="text-[#16A34A] font-bold bg-[#F0FDF4]">
+                      + Nouveau client...
+                    </option>
+                  )}
+                </select>
+                <Button
+                  type="button"
+                  onClick={() => setIsNewClientOpen(true)}
+                  title="Nouveau client"
+                  className="h-10 w-10 shrink-0 bg-[#F0FDF4] hover:bg-emerald-100 text-[#16A34A] border border-[#16A34A]/20 rounded-lg flex items-center justify-center"
+                >
+                  <UserPlus className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
 
             {/* Issue Date */}
