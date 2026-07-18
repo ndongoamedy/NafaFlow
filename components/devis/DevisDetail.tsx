@@ -19,7 +19,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { generateDocumentPDF } from "@/lib/utils/pdf";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import DevisLineEditor, { DevisLine } from "./DevisLineEditor";
+import DevisLineEditor, { DevisLine, DISCOUNT_LABEL } from "./DevisLineEditor";
 
 interface DevisDetailProps {
   quoteId: string;
@@ -43,6 +43,8 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
   const [editIssueDate, setEditIssueDate] = useState("");
   const [editValidityDays, setEditValidityDays] = useState("15");
   const [editLines, setEditLines] = useState<DevisLine[]>([]);
+  const [editDiscount, setEditDiscount] = useState(0);
+  const [discount, setDiscount] = useState(0); // remise du devis chargé (consultation)
   const [clients, setClients] = useState<ClientItem[]>([]);
 
   const loadData = useCallback(async () => {
@@ -102,7 +104,7 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
 
         if (linesErr) throw linesErr;
 
-        const mappedLines: DevisLine[] = (linesData || []).map((l) => {
+        const allMappedLines: DevisLine[] = (linesData || []).map((l) => {
           const line = l as { id: string; service_id?: string | null; description?: string | null; qty?: number | null; unit_price?: number | null };
           return {
             id: line.id,
@@ -112,6 +114,12 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
             unitPrice: Math.round(Number(line.unit_price)) || 0,
           };
         });
+
+        // Une remise est stockée comme ligne à montant négatif : on l'isole.
+        const discountLine = allMappedLines.find((l) => l.quantity * l.unitPrice < 0);
+        const mappedLines = allMappedLines.filter((l) => l.quantity * l.unitPrice >= 0);
+        const loadedDiscount = discountLine ? Math.abs(discountLine.quantity * discountLine.unitPrice) : 0;
+        setDiscount(loadedDiscount);
 
         const qData = quoteData as { id: string; client_id: string; created_at: string; valid_until?: string | null; total: number; status?: string | null; clients?: { name: string } | null };
 
@@ -159,17 +167,20 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
       setEditIssueDate(quote.issueDate);
       setEditValidityDays(String(quote.validityDays ?? 15));
       setEditLines(quote.lines || []);
-      // Déduit si la TVA a été appliquée à ce devis (total stocké > sous-total HT)
+      setEditDiscount(discount);
+      // Déduit si la TVA a été appliquée à ce devis (total stocké > Net HT après remise)
       const sub = (quote.lines || []).reduce((s, l) => s + l.quantity * l.unitPrice, 0);
-      setApplyVatDoc(quote.total > sub + 1);
+      const net = sub - discount;
+      setApplyVatDoc(quote.total > net + 1);
     }
-  }, [quote]);
+  }, [quote, discount]);
 
   // Avertir avant de quitter en mode édition si des changements ne sont pas enregistrés
   const isDirtyEdit = quoteId === "modifier" && !!quote && (
     editClient !== quote.clientId ||
     editIssueDate !== quote.issueDate ||
     String(editValidityDays) !== String(quote.validityDays ?? 15) ||
+    editDiscount !== discount ||
     JSON.stringify(editLines) !== JSON.stringify(quote.lines || [])
   );
   useUnsavedChanges(isDirtyEdit);
@@ -182,6 +193,11 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
       const shortId = quote.id.split("-")[0]?.slice(0, 4).toUpperCase() || quote.id.slice(0, 4).toUpperCase();
       const quoteRef = `D-${year}-${shortId}`;
 
+      // Réinjecte la remise comme ligne négative pour l'affichage PDF.
+      const pdfLines = discount > 0
+        ? [...quote.lines, { id: "discount", description: DISCOUNT_LABEL, quantity: 1, unitPrice: -Math.round(discount) }]
+        : quote.lines;
+
       await generateDocumentPDF({
         id: quoteRef,
         type: "devis",
@@ -190,7 +206,7 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
         issueDate: quote.issueDate,
         validityDays: quote.validityDays,
         status: quote.status,
-        lines: quote.lines,
+        lines: pdfLines,
         total: total,
       });
       toast.success(`Le PDF du devis ${quoteRef} a été généré et téléchargé.`);
@@ -208,8 +224,10 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
     }
 
     const subtotal = editLines.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+    const clampedDiscount = Math.max(0, Math.min(editDiscount, subtotal));
+    const netHT = subtotal - clampedDiscount;
     const vatRate = settings?.billing?.vat ?? 18;
-    const editTotal = applyVatDoc ? subtotal * (1 + vatRate / 100) : subtotal;
+    const editTotal = applyVatDoc ? netHT * (1 + vatRate / 100) : netHT;
 
     try {
       const supabase = createBrowserClient();
@@ -245,6 +263,18 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
         unit_price: Math.round(line.unitPrice),
         total: Math.round(line.quantity * line.unitPrice),
       }));
+
+      // Remise éventuelle : ligne à montant négatif.
+      if (clampedDiscount > 0) {
+        linesToInsert.push({
+          quote_id: quote.id,
+          service_id: null,
+          description: DISCOUNT_LABEL,
+          qty: 1,
+          unit_price: -Math.round(clampedDiscount),
+          total: -Math.round(clampedDiscount),
+        });
+      }
 
       const { error: insertLinesErr } = await supabase
         .schema("nafaflow")
@@ -299,11 +329,13 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
   // En mode édition : le toggle pilote la TVA. En consultation : on déduit du total stocké.
   const isEditingMode = quoteId === "modifier";
   const items = quote.lines || [];
-  const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  const applyVat = isEditingMode ? applyVatDoc : quote.total > subtotal + 1;
+  const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0); // brut HT
+  const clampedDiscount = Math.max(0, Math.min(discount, subtotal));
+  const netHT = subtotal - clampedDiscount;
+  const applyVat = isEditingMode ? applyVatDoc : quote.total > netHT + 1;
   const vatRate = settings?.billing?.vat ?? 18;
-  const vat = applyVat ? (isEditingMode ? Math.round(subtotal * (vatRate / 100)) : quote.total - subtotal) : 0;
-  const total = isEditingMode ? subtotal + vat : quote.total;
+  const vat = applyVat ? (isEditingMode ? Math.round(netHT * (vatRate / 100)) : quote.total - netHT) : 0;
+  const total = isEditingMode ? netHT + vat : quote.total;
 
   const year = quote ? new Date(quote.issueDate).getFullYear() : 0;
   const shortId = quote ? (quote.id.split("-")[0]?.slice(0, 4).toUpperCase() || quote.id.slice(0, 4).toUpperCase()) : "";
@@ -313,8 +345,10 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
 
   if (isEditing) {
     const editSubtotal = editLines.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-    const editVat = applyVat ? Math.round(editSubtotal * (vatRate / 100)) : 0;
-    const editTotal = editSubtotal + editVat;
+    const editClampedDiscount = Math.max(0, Math.min(editDiscount, editSubtotal));
+    const editNetHT = editSubtotal - editClampedDiscount;
+    const editVat = applyVat ? Math.round(editNetHT * (vatRate / 100)) : 0;
+    const editTotal = editNetHT + editVat;
     const isBrouillon = quote.status === "brouillon";
 
     return (
@@ -423,7 +457,7 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
                     <Switch checked={applyVatDoc} onCheckedChange={setApplyVatDoc} />
                   </div>
                 </div>
-                <DevisLineEditor lines={editLines} onChange={setEditLines} applyVat={applyVatDoc} />
+                <DevisLineEditor lines={editLines} onChange={setEditLines} applyVat={applyVatDoc} discount={editDiscount} onDiscountChange={setEditDiscount} />
               </CardContent>
             </Card>
           </div>
@@ -441,6 +475,18 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
                     <span>SOUS-TOTAL HT</span>
                     <span className="tabular-nums"><AmountFCFA amount={editSubtotal} /></span>
                   </div>
+                  {editClampedDiscount > 0 && (
+                    <>
+                      <div className="flex items-center justify-between text-xs text-rose-500 font-semibold">
+                        <span>REMISE</span>
+                        <span className="tabular-nums">− <AmountFCFA amount={editClampedDiscount} /></span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-emerald-600 font-semibold">
+                        <span>NET HT</span>
+                        <span className="tabular-nums"><AmountFCFA amount={editNetHT} /></span>
+                      </div>
+                    </>
+                  )}
                   {applyVat && (
                     <div className="flex items-center justify-between text-xs text-slate-500 font-semibold">
                       <span>TVA ({vatRate}%)</span>
@@ -671,6 +717,18 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
                     <span>SOUS-TOTAL HT</span>
                     <span className="tabular-nums"><AmountFCFA amount={subtotal} /></span>
                   </div>
+                  {clampedDiscount > 0 && (
+                    <>
+                      <div className="flex items-center justify-between text-xs text-rose-500 font-semibold">
+                        <span>REMISE</span>
+                        <span className="tabular-nums">− <AmountFCFA amount={clampedDiscount} /></span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-emerald-600 font-semibold">
+                        <span>NET HT</span>
+                        <span className="tabular-nums"><AmountFCFA amount={netHT} /></span>
+                      </div>
+                    </>
+                  )}
                   {applyVat && (
                     <div className="flex items-center justify-between text-xs text-slate-500 font-semibold">
                       <span>TVA ({vatRate}%)</span>

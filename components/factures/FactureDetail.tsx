@@ -14,7 +14,7 @@ import AmountFCFA from "@/components/shared/AmountFCFA";
 import DateDisplay from "@/components/shared/DateDisplay";
 import ReminderPanel from "./ReminderPanel";
 import { Label } from "@/components/ui/label";
-import DevisLineEditor, { DevisLine } from "../devis/DevisLineEditor";
+import DevisLineEditor, { DevisLine, DISCOUNT_LABEL } from "../devis/DevisLineEditor";
 import { formatFCFA, formatDate } from "@/lib/utils/format";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
@@ -78,6 +78,8 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
   const [editIssueDate, setEditIssueDate] = useState("");
   const [editDueDate, setEditDueDate] = useState("");
   const [editLines, setEditLines] = useState<DevisLine[]>([]);
+  const [editDiscount, setEditDiscount] = useState(0);
+  const [discount, setDiscount] = useState(0); // remise de la facture chargée (consultation)
   const [applyVatDoc, setApplyVatDoc] = useState(true); // TVA appliquée à cette facture
   const [clients, setClients] = useState<ClientItem[]>([]);
 
@@ -175,13 +177,19 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
         const invoiceRef = invData.number || `NF-${year}-${shortId}`;
 
         // Map database lines to DevisLine structure
-        const lines: DevisLine[] = (linesData || []).map((line) => ({
+        const allLines: DevisLine[] = (linesData || []).map((line) => ({
           id: line.id,
           serviceId: line.service_id || null,
           description: line.description || "",
           quantity: Number(line.qty) || 1,
           unitPrice: Number(line.unit_price) || 0,
         }));
+
+        // Une remise est stockée comme ligne à montant négatif : on l'isole.
+        const discountLine = allLines.find((l) => l.quantity * l.unitPrice < 0);
+        const lines = allLines.filter((l) => l.quantity * l.unitPrice >= 0);
+        const loadedDiscount = discountLine ? Math.abs(discountLine.quantity * discountLine.unitPrice) : 0;
+        setDiscount(loadedDiscount);
 
         // Map database payments to InvoicePayment structure
         const payments: InvoicePayment[] = (paymentsData || []).map((p) => ({
@@ -267,18 +275,21 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
       setEditIssueDate(invoice.issueDate);
       setEditDueDate(invoice.dueDate);
       setEditLines(invoice.lines || []);
+      setEditDiscount(discount);
       setShouldMarkAsSent(invoice.status === "brouillon");
-      // Déduit si la TVA a été appliquée (total stocké > sous-total HT)
+      // Déduit si la TVA a été appliquée (total stocké > Net HT après remise)
       const sub = (invoice.lines || []).reduce((s, l) => s + l.quantity * l.unitPrice, 0);
-      setApplyVatDoc(invoice.total > sub + 1);
+      const net = sub - discount;
+      setApplyVatDoc(invoice.total > net + 1);
     }
-  }, [invoice]);
+  }, [invoice, discount]);
 
   // Avertir avant de quitter en mode édition si des changements ne sont pas enregistrés
   const isDirtyEdit = invoiceId === "modifier" && !!invoice && (
     editClient !== invoice.clientId ||
     editIssueDate !== invoice.issueDate ||
     editDueDate !== invoice.dueDate ||
+    editDiscount !== discount ||
     JSON.stringify(editLines) !== JSON.stringify(invoice.lines || [])
   );
   useUnsavedChanges(isDirtyEdit);
@@ -286,17 +297,24 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
   // Édition : le toggle pilote la TVA. Consultation : on déduit du total stocké.
   const isEditingMode = invoiceId === "modifier";
   const items = invoice?.lines || [];
-  const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+  const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0); // brut HT
+  const clampedDiscount = Math.max(0, Math.min(discount, subtotal));
+  const netHT = subtotal - clampedDiscount;
   const invoiceTotal = invoice?.total ?? 0;
-  const applyVat = isEditingMode ? applyVatDoc : invoiceTotal > subtotal + 1;
+  const applyVat = isEditingMode ? applyVatDoc : invoiceTotal > netHT + 1;
   const vatRate = settings?.billing?.vat ?? 18;
-  const vat = applyVat ? (isEditingMode ? Math.round(subtotal * (vatRate / 100)) : invoiceTotal - subtotal) : 0;
-  const total = isEditingMode ? subtotal + vat : invoiceTotal;
+  const vat = applyVat ? (isEditingMode ? Math.round(netHT * (vatRate / 100)) : invoiceTotal - netHT) : 0;
+  const total = isEditingMode ? netHT + vat : invoiceTotal;
 
   const payments = invoice?.payments || [];
   const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
   const remainingAmount = Math.max(0, total - totalPaid);
   const isOverdue = invoice?.status === "en retard";
+
+  // Lignes à envoyer au PDF : réinjecte la remise comme ligne négative.
+  const pdfLines: DevisLine[] = clampedDiscount > 0
+    ? [...items, { id: "discount", serviceId: null, description: DISCOUNT_LABEL, quantity: 1, unitPrice: -Math.round(clampedDiscount) }]
+    : items;
 
   const handleDownloadPDF = async () => {
     if (!invoice) return;
@@ -310,7 +328,7 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
         issueDate: invoice.issueDate,
         dueDate: invoice.dueDate,
         status: invoice.status,
-        lines: invoice.lines,
+        lines: pdfLines,
         total: total,
         amountPaid: totalPaid,
         amountRemaining: remainingAmount,
@@ -599,7 +617,9 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
     try {
       const supabase = createBrowserClient();
       const subtotal = editLines.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-      const editTotal = applyVat ? subtotal * (1 + vatRate / 100) : subtotal;
+      const editClampedDiscount = Math.max(0, Math.min(editDiscount, subtotal));
+      const editNetHT = subtotal - editClampedDiscount;
+      const editTotal = applyVat ? editNetHT * (1 + vatRate / 100) : editNetHT;
 
       // 1. Update invoice parent
       const { error: parentErr } = await supabase
@@ -633,6 +653,18 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
         unit_price: line.unitPrice,
         total: line.quantity * line.unitPrice,
       }));
+
+      // Remise éventuelle : ligne à montant négatif.
+      if (editClampedDiscount > 0) {
+        newLinesRows.push({
+          invoice_id: invoice.id,
+          service_id: null,
+          description: DISCOUNT_LABEL,
+          qty: 1,
+          unit_price: -Math.round(editClampedDiscount),
+          total: -Math.round(editClampedDiscount),
+        });
+      }
 
       const { error: insLinesErr } = await supabase
         .schema("nafaflow")
@@ -692,7 +724,7 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
           issueDate: invoice.issueDate,
           dueDate: invoice.dueDate,
           status: invoice.status,
-          lines: invoice.lines,
+          lines: pdfLines,
           total: total,
           amountPaid: totalPaid,
           amountRemaining: remainingAmount,
@@ -742,8 +774,10 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
 
   if (isEditing) {
     const editSubtotal = editLines.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-    const editVat = applyVat ? Math.round(editSubtotal * (vatRate / 100)) : 0;
-    const editTotal = editSubtotal + editVat;
+    const editClampedDiscount = Math.max(0, Math.min(editDiscount, editSubtotal));
+    const editNetHT = editSubtotal - editClampedDiscount;
+    const editVat = applyVat ? Math.round(editNetHT * (vatRate / 100)) : 0;
+    const editTotal = editNetHT + editVat;
     const isBrouillon = invoice.status === "brouillon";
 
     return (
@@ -852,7 +886,7 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
                     <Switch checked={applyVatDoc} onCheckedChange={setApplyVatDoc} />
                   </div>
                 </div>
-                <DevisLineEditor lines={editLines} onChange={setEditLines} applyVat={applyVatDoc} />
+                <DevisLineEditor lines={editLines} onChange={setEditLines} applyVat={applyVatDoc} discount={editDiscount} onDiscountChange={setEditDiscount} />
               </CardContent>
             </Card>
           </div>
@@ -870,6 +904,18 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
                     <span>SOUS-TOTAL HT</span>
                     <span className="tabular-nums"><AmountFCFA amount={editSubtotal} /></span>
                   </div>
+                  {editClampedDiscount > 0 && (
+                    <>
+                      <div className="flex items-center justify-between text-xs text-rose-500 font-semibold">
+                        <span>REMISE</span>
+                        <span className="tabular-nums">− <AmountFCFA amount={editClampedDiscount} /></span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-emerald-600 font-semibold">
+                        <span>NET HT</span>
+                        <span className="tabular-nums"><AmountFCFA amount={editNetHT} /></span>
+                      </div>
+                    </>
+                  )}
                   {applyVat && (
                     <div className="flex items-center justify-between text-xs text-slate-500 font-semibold">
                       <span>TVA ({vatRate}%)</span>
@@ -1119,6 +1165,18 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
                     <span>SOUS-TOTAL HT</span>
                     <span className="tabular-nums"><AmountFCFA amount={subtotal} /></span>
                   </div>
+                  {clampedDiscount > 0 && (
+                    <>
+                      <div className="flex items-center justify-between text-xs text-rose-500 font-semibold">
+                        <span>REMISE</span>
+                        <span className="tabular-nums">− <AmountFCFA amount={clampedDiscount} /></span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-emerald-600 font-semibold">
+                        <span>NET HT</span>
+                        <span className="tabular-nums"><AmountFCFA amount={netHT} /></span>
+                      </div>
+                    </>
+                  )}
                   {applyVat && (
                     <div className="flex items-center justify-between text-xs text-slate-500 font-semibold">
                       <span>TVA ({vatRate}%)</span>

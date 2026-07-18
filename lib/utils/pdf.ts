@@ -58,7 +58,18 @@ export async function generateDocumentPDF(data: PDFDocumentData) {
   const company = settings?.company;
   // La TVA du document est déduite du total stocké (respecte le choix par document),
   // et non du réglage global de l'organisation.
-  const pdfSubtotalHT = (data.lines || []).reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+  // Une remise est stockée comme une ligne à montant négatif : on la sépare
+  // des prestations pour l'afficher proprement dans le bloc des totaux.
+  const allLines = data.lines || [];
+  const positiveLines = allLines.filter((item) => item.quantity * item.unitPrice >= 0);
+  const discountAmount = allLines
+    .filter((item) => item.quantity * item.unitPrice < 0)
+    .reduce((sum, item) => sum + item.quantity * item.unitPrice, 0); // ≤ 0
+  const grossHT = positiveLines.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+  const hasDiscount = discountAmount < 0;
+
+  // Net HT (après remise) = somme de toutes les lignes (les négatives déduisent).
+  const pdfSubtotalHT = grossHT + discountAmount;
   const applyVat = data.total > pdfSubtotalHT + 1;
   const vatRate = applyVat && pdfSubtotalHT > 0
     ? Math.round(((data.total - pdfSubtotalHT) / pdfSubtotalHT) * 100)
@@ -253,7 +264,7 @@ export async function generateDocumentPDF(data: PDFDocumentData) {
   doc.setFont("Helvetica", "normal");
   doc.setFontSize(8.5);
 
-  data.lines.forEach((line) => {
+  positiveLines.forEach((line) => {
     // Description text wrapping
     const descLines = doc.splitTextToSize(line.description, 80);
     const lineCount = descLines.length;
@@ -307,7 +318,7 @@ export async function generateDocumentPDF(data: PDFDocumentData) {
   const totalsWidth = 65;
   const lineSpacing = 6.5;
 
-  const subtotalHT = pdfSubtotalHT;
+  const subtotalHT = pdfSubtotalHT; // Net HT (après remise)
   const vatAmount = applyVat ? Math.round(data.total - subtotalHT) : 0;
   const totalTTC = data.total;
 
@@ -316,17 +327,26 @@ export async function generateDocumentPDF(data: PDFDocumentData) {
   const amountPaid = data.amountPaid !== undefined ? data.amountPaid : (isPaid ? totalTTC : 0);
   const amountRemaining = data.amountRemaining !== undefined ? data.amountRemaining : (totalTTC - amountPaid);
 
+  // Lignes de remise (affichées uniquement si une remise existe).
+  const discountRows = hasDiscount
+    ? [
+        { label: "Sous-total HT :", value: formatFCFA(grossHT) },
+        { label: "Remise :", value: formatFCFA(discountAmount) },
+        { label: "Net HT :", value: formatFCFA(subtotalHT), bold: true },
+      ]
+    : [{ label: "Total HT :", value: formatFCFA(subtotalHT) }];
+
   const totals =
     data.type === "facture"
       ? [
-          { label: "Total HT :", value: formatFCFA(subtotalHT) },
+          ...discountRows,
           { label: `Total TVA (${applyVat ? vatRate : 0}%) :`, value: formatFCFA(vatAmount) },
           { label: "Total TTC :", value: formatFCFA(totalTTC), bold: true, highlight: true },
           { label: "Montant Payé :", value: formatFCFA(amountPaid) },
           { label: "Reste à payer :", value: formatFCFA(amountRemaining), bold: true },
         ]
       : [
-          { label: "Total HT :", value: formatFCFA(subtotalHT) },
+          ...discountRows,
           { label: `Total TVA (${applyVat ? vatRate : 0}%) :`, value: formatFCFA(vatAmount) },
           { label: "Total TTC :", value: formatFCFA(totalTTC), bold: true, highlight: true },
         ];

@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Save, Send, ShieldAlert, UserPlus } from "lucide-react";
-import DevisLineEditor, { DevisLine } from "@/components/devis/DevisLineEditor";
+import DevisLineEditor, { DevisLine, DISCOUNT_LABEL } from "@/components/devis/DevisLineEditor";
 import { toast } from "sonner";
 import { ClientItem } from "@/lib/utils/state";
 import { fetchOrgSettings, OrgSettings, errorMessage } from "@/lib/utils/orgProfile";
@@ -29,6 +29,7 @@ export default function FactureForm() {
 
   const [issueDate, setIssueDate] = useState(new Date().toISOString().slice(0, 10));
   const [dueDays, setDueDays] = useState("30");
+  const [discount, setDiscount] = useState(0);
   const [lines, setLines] = useState<DevisLine[]>([
     { id: "1", description: "", quantity: 1, unitPrice: 0 },
   ]);
@@ -99,8 +100,10 @@ export default function FactureForm() {
   // Calculations
   const vatRate = settings?.billing.vat ?? 18;
   const subtotal = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
-  const vatAmount = applyVat ? Math.round(subtotal * (vatRate / 100)) : 0;
-  const totalTTC = subtotal + vatAmount;
+  const clampedDiscount = Math.max(0, Math.min(discount, subtotal));
+  const netHT = subtotal - clampedDiscount;
+  const vatAmount = applyVat ? Math.round(netHT * (vatRate / 100)) : 0;
+  const totalTTC = netHT + vatAmount;
 
   // Avertir avant de quitter si des prestations ont été saisies
   const [saved, setSaved] = useState(false);
@@ -232,6 +235,18 @@ export default function FactureForm() {
         };
       });
 
+      // Remise éventuelle : ligne à montant négatif.
+      if (clampedDiscount > 0) {
+        linesToInsert.push({
+          invoice_id: invoiceResult.id,
+          service_id: null,
+          description: DISCOUNT_LABEL,
+          qty: 1,
+          unit_price: -Math.round(clampedDiscount),
+          total: -Math.round(clampedDiscount),
+        });
+      }
+
       const { error: linesErr } = await supabase
         .schema("nafaflow")
         .from("invoice_lines")
@@ -344,7 +359,7 @@ export default function FactureForm() {
           </div>
 
           {/* Prestataires Line Editor */}
-          <DevisLineEditor lines={lines} onChange={setLines} applyVat={applyVat} />
+          <DevisLineEditor lines={lines} onChange={setLines} applyVat={applyVat} discount={discount} onDiscountChange={setDiscount} />
         </CardContent>
       </Card>
 

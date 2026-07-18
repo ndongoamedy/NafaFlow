@@ -19,13 +19,19 @@ export interface DevisLine {
   unitPrice: number;
 }
 
+// Libellé de la ligne technique portant la remise (montant négatif).
+// Une remise est détectée à la lecture par son montant négatif.
+export const DISCOUNT_LABEL = "Remise commerciale";
+
 interface DevisLineEditorProps {
   lines: DevisLine[];
   onChange: (lines: DevisLine[]) => void;
   applyVat?: boolean; // TVA appliquée au document (prioritaire sur le réglage org)
+  discount?: number; // Remise en FCFA (montant), appliquée avant TVA
+  onDiscountChange?: (value: number) => void;
 }
 
-export default function DevisLineEditor({ lines, onChange, applyVat: applyVatProp }: DevisLineEditorProps) {
+export default function DevisLineEditor({ lines, onChange, applyVat: applyVatProp, discount = 0, onDiscountChange }: DevisLineEditorProps) {
   const [catalogSearch, setCatalogSearch] = useState("");
   const [isCatalogOpen, setIsCatalogOpen] = useState(false);
   const [settings, setSettings] = useState<OrgSettings | null>(null);
@@ -124,8 +130,10 @@ export default function DevisLineEditor({ lines, onChange, applyVat: applyVatPro
   const vatRate = settings?.billing.vat ?? 18;
 
   const subtotal = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
-  const vat = applyVat ? subtotal * (vatRate / 100) : 0;
-  const total = subtotal + vat;
+  const clampedDiscount = Math.max(0, Math.min(discount, subtotal)); // jamais > sous-total
+  const netHT = subtotal - clampedDiscount;
+  const vat = applyVat ? netHT * (vatRate / 100) : 0;
+  const total = netHT + vat;
 
   const filteredCatalogue = catalogue.filter((s) =>
     s.name.toLowerCase().includes(catalogSearch.toLowerCase())
@@ -290,9 +298,28 @@ export default function DevisLineEditor({ lines, onChange, applyVat: applyVatPro
       <div className="flex justify-end pt-2">
         <div className="w-80 bg-slate-50 border border-slate-100 p-4 rounded-xl space-y-2.5 shadow-inner">
           <div className="flex items-center justify-between text-xs text-slate-500 font-semibold">
-            <span>TOTAL HT</span>
+            <span>{onDiscountChange ? "SOUS-TOTAL HT" : "TOTAL HT"}</span>
             <span className="tabular-nums"><AmountFCFA amount={subtotal} /></span>
           </div>
+          {onDiscountChange && (
+            <div className="flex items-center justify-between text-xs text-slate-500 font-semibold gap-2">
+              <span className="whitespace-nowrap">REMISE (F)</span>
+              <Input
+                type="number"
+                min="0"
+                value={discount || ""}
+                placeholder="0"
+                onChange={(e) => onDiscountChange(Math.max(0, parseFloat(e.target.value) || 0))}
+                className="h-7 w-28 text-right text-xs font-semibold rounded-lg bg-white"
+              />
+            </div>
+          )}
+          {onDiscountChange && clampedDiscount > 0 && (
+            <div className="flex items-center justify-between text-xs text-emerald-600 font-semibold">
+              <span>NET HT</span>
+              <span className="tabular-nums"><AmountFCFA amount={netHT} /></span>
+            </div>
+          )}
           {applyVat && (
             <div className="flex items-center justify-between text-xs text-slate-500 font-semibold">
               <span>TVA ({vatRate}%)</span>
