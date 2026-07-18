@@ -22,9 +22,10 @@ export interface DevisLine {
 interface DevisLineEditorProps {
   lines: DevisLine[];
   onChange: (lines: DevisLine[]) => void;
+  applyVat?: boolean; // TVA appliquée au document (prioritaire sur le réglage org)
 }
 
-export default function DevisLineEditor({ lines, onChange }: DevisLineEditorProps) {
+export default function DevisLineEditor({ lines, onChange, applyVat: applyVatProp }: DevisLineEditorProps) {
   const [catalogSearch, setCatalogSearch] = useState("");
   const [isCatalogOpen, setIsCatalogOpen] = useState(false);
   const [settings, setSettings] = useState<OrgSettings | null>(null);
@@ -119,7 +120,7 @@ export default function DevisLineEditor({ lines, onChange }: DevisLineEditorProp
   };
 
   // Calculations
-  const applyVat = settings?.billing.applyVat ?? true;
+  const applyVat = applyVatProp ?? settings?.billing.applyVat ?? true;
   const vatRate = settings?.billing.vat ?? 18;
 
   const subtotal = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);

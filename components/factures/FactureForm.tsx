@@ -14,6 +14,7 @@ import { ClientItem } from "@/lib/utils/state";
 import { fetchOrgSettings, OrgSettings, errorMessage } from "@/lib/utils/orgProfile";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
+import { Switch } from "@/components/ui/switch";
 
 // Création d'une facture directe, sans passer par un devis.
 export default function FactureForm() {
@@ -83,16 +84,19 @@ export default function FactureForm() {
     }
   };
 
+  // TVA appliquée à cette facture (par défaut : réglage de l'organisation)
+  const [applyVat, setApplyVat] = useState(true);
+
   useEffect(() => {
     fetchOrgSettings().then((s) => {
       setSettings(s);
+      setApplyVat(s?.billing.applyVat ?? true);
       if (s?.billing?.paymentTerm) setDueDays(String(s.billing.paymentTerm));
     });
     loadInitialData();
   }, []);
 
   // Calculations
-  const applyVat = settings?.billing.applyVat ?? true;
   const vatRate = settings?.billing.vat ?? 18;
   const subtotal = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
   const vatAmount = applyVat ? Math.round(subtotal * (vatRate / 100)) : 0;
@@ -328,8 +332,19 @@ export default function FactureForm() {
             </div>
           </div>
 
+          {/* Toggle TVA pour cette facture */}
+          <div className="flex items-center justify-between bg-slate-50/60 border border-slate-100 rounded-xl px-4 py-3">
+            <div className="space-y-0.5">
+              <span className="text-xs font-bold text-slate-600 uppercase">Appliquer la TVA ({vatRate}%)</span>
+              <p className="text-[11px] text-slate-400 font-medium">
+                Inclure ou non la TVA sur cette facture. Par défaut : votre réglage dans Paramètres.
+              </p>
+            </div>
+            <Switch checked={applyVat} onCheckedChange={setApplyVat} />
+          </div>
+
           {/* Prestataires Line Editor */}
-          <DevisLineEditor lines={lines} onChange={setLines} />
+          <DevisLineEditor lines={lines} onChange={setLines} applyVat={applyVat} />
         </CardContent>
       </Card>
 
@@ -338,8 +353,8 @@ export default function FactureForm() {
         <span className="text-xs text-slate-400 font-medium flex items-center gap-1.5">
           <ShieldAlert className="h-4.5 w-4.5 text-slate-300" />
           {applyVat
-            ? `TVA de ${vatRate}% appliquée automatiquement selon vos Paramètres.`
-            : "TVA désactivée selon vos Paramètres."}
+            ? `TVA de ${vatRate}% appliquée à cette facture.`
+            : "TVA non appliquée à cette facture."}
         </span>
 
         <div className="flex items-center gap-3 shrink-0 self-end">

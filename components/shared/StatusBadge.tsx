@@ -17,6 +17,8 @@ export default function StatusBadge({ status, className }: StatusBadgeProps) {
       case "payee":
       case "accepted":
       case "accepté":
+      case "facturé":
+      case "facture":
         return "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700";
       case "partiellement payée":
       case "partiellement payee":
@@ -33,6 +35,9 @@ export default function StatusBadge({ status, className }: StatusBadgeProps) {
       case "overdue":
       case "refusé":
       case "refused":
+      case "rejected":
+      case "expiré":
+      case "expired":
         return "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-50 hover:text-rose-700";
       default:
         return "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-600";
@@ -43,9 +48,21 @@ export default function StatusBadge({ status, className }: StatusBadgeProps) {
     switch (normalized) {
       case "payée":
       case "payee":
+        return "Payée";
+      // Statuts propres aux DEVIS (un devis n'est jamais « payé »)
       case "accepted":
       case "accepté":
-        return "Payée";
+        return "Accepté";
+      case "refusé":
+      case "refused":
+      case "rejected":
+        return "Refusé";
+      case "expiré":
+      case "expired":
+        return "Expiré";
+      case "facturé":
+      case "facture":
+        return "Facturé";
       case "partiellement payée":
       case "partiellement payee":
       case "partial":

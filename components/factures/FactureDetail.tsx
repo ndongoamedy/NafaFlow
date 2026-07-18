@@ -18,6 +18,7 @@ import DevisLineEditor, { DevisLine } from "../devis/DevisLineEditor";
 import { formatFCFA, formatDate } from "@/lib/utils/format";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
+import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -77,6 +78,7 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
   const [editIssueDate, setEditIssueDate] = useState("");
   const [editDueDate, setEditDueDate] = useState("");
   const [editLines, setEditLines] = useState<DevisLine[]>([]);
+  const [applyVatDoc, setApplyVatDoc] = useState(true); // TVA appliquée à cette facture
   const [clients, setClients] = useState<ClientItem[]>([]);
 
   // Send modal states
@@ -266,6 +268,9 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
       setEditDueDate(invoice.dueDate);
       setEditLines(invoice.lines || []);
       setShouldMarkAsSent(invoice.status === "brouillon");
+      // Déduit si la TVA a été appliquée (total stocké > sous-total HT)
+      const sub = (invoice.lines || []).reduce((s, l) => s + l.quantity * l.unitPrice, 0);
+      setApplyVatDoc(invoice.total > sub + 1);
     }
   }, [invoice]);
 
@@ -278,13 +283,15 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
   );
   useUnsavedChanges(isDirtyEdit);
 
-  const applyVat = settings?.billing?.applyVat ?? true;
-  const vatRate = settings?.billing?.vat ?? 18;
-
+  // Édition : le toggle pilote la TVA. Consultation : on déduit du total stocké.
+  const isEditingMode = invoiceId === "modifier";
   const items = invoice?.lines || [];
   const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  const vat = applyVat ? Math.round(subtotal * (vatRate / 100)) : 0;
-  const total = subtotal + vat;
+  const invoiceTotal = invoice?.total ?? 0;
+  const applyVat = isEditingMode ? applyVatDoc : invoiceTotal > subtotal + 1;
+  const vatRate = settings?.billing?.vat ?? 18;
+  const vat = applyVat ? (isEditingMode ? Math.round(subtotal * (vatRate / 100)) : invoiceTotal - subtotal) : 0;
+  const total = isEditingMode ? subtotal + vat : invoiceTotal;
 
   const payments = invoice?.payments || [];
   const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
@@ -836,12 +843,16 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
             {/* Line items editor */}
             <Card className="bg-white border-slate-100 shadow-sm overflow-hidden">
               <CardContent className="p-0">
-                <div className="p-6 border-b border-slate-100">
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between gap-4">
                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                     Prestations & Articles
                   </h3>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs font-semibold text-slate-500">TVA ({vatRate}%)</span>
+                    <Switch checked={applyVatDoc} onCheckedChange={setApplyVatDoc} />
+                  </div>
                 </div>
-                <DevisLineEditor lines={editLines} onChange={setEditLines} />
+                <DevisLineEditor lines={editLines} onChange={setEditLines} applyVat={applyVatDoc} />
               </CardContent>
             </Card>
           </div>

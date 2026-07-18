@@ -56,8 +56,13 @@ export async function generateDocumentPDF(data: PDFDocumentData) {
   ]);
 
   const company = settings?.company;
-  const applyVat = settings?.billing?.applyVat ?? true;
-  const vatRate = settings?.billing?.vat ?? 18;
+  // La TVA du document est déduite du total stocké (respecte le choix par document),
+  // et non du réglage global de l'organisation.
+  const pdfSubtotalHT = (data.lines || []).reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+  const applyVat = data.total > pdfSubtotalHT + 1;
+  const vatRate = applyVat && pdfSubtotalHT > 0
+    ? Math.round(((data.total - pdfSubtotalHT) / pdfSubtotalHT) * 100)
+    : (settings?.billing?.vat ?? 18);
   const paymentTerm = settings?.billing?.paymentTerm ?? 30;
 
   // Initialize jsPDF (A4 page: 210mm x 297mm)
@@ -302,10 +307,9 @@ export async function generateDocumentPDF(data: PDFDocumentData) {
   const totalsWidth = 65;
   const lineSpacing = 6.5;
 
-  const items = data.lines || [];
-  const subtotalHT = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  const vatAmount = applyVat ? Math.round(subtotalHT * (vatRate / 100)) : 0;
-  const totalTTC = subtotalHT + vatAmount;
+  const subtotalHT = pdfSubtotalHT;
+  const vatAmount = applyVat ? Math.round(data.total - subtotalHT) : 0;
+  const totalTTC = data.total;
 
   // Let's decide if this invoice is paid
   const isPaid = data.status.trim().toLowerCase() === "payée" || data.status.trim().toLowerCase() === "accepted";

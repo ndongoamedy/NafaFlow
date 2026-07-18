@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Trash2, Search, ArrowRightLeft, Eye, Plus } from "lucide-react";
+import { Trash2, Search, ArrowRightLeft, Eye, Plus, FileCheck } from "lucide-react";
 import StatusBadge from "@/components/shared/StatusBadge";
 import AmountFCFA from "@/components/shared/AmountFCFA";
 import DateDisplay from "@/components/shared/DateDisplay";
@@ -23,6 +23,7 @@ export default function DevisList() {
   const [search, setSearch] = useState("");
   const [selectedQuote, setSelectedQuote] = useState<DevisItem | null>(null);
   const [isConvertOpen, setIsConvertOpen] = useState(false);
+  const [convertedQuoteIds, setConvertedQuoteIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   
   // Delete candidate state
@@ -39,6 +40,14 @@ export default function DevisList() {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
+
+      // Devis déjà convertis en factures (pour empêcher une double facturation)
+      const { data: invoicesData } = await supabase
+        .schema("nafaflow")
+        .from("invoices")
+        .select("quote_id")
+        .not("quote_id", "is", null);
+      setConvertedQuoteIds(new Set((invoicesData || []).map((i) => i.quote_id as string)));
 
       if (data) {
         const mapped: DevisItem[] = data.map((q) => {
@@ -223,8 +232,20 @@ export default function DevisList() {
                       </TableCell>
                       <TableCell className="py-3.5 px-6 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          {/* Convert trigger (only on accepted) */}
-                          {quote.status === "accepted" && (
+                          {/* Déjà facturé : lien vers les factures */}
+                          {convertedQuoteIds.has(quote.id) ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push("/factures");
+                              }}
+                              className="text-emerald-700 bg-emerald-50 border border-emerald-200/50 font-bold h-7 rounded-lg text-xs flex items-center gap-1 px-2.5 shrink-0 hover:bg-emerald-100/80"
+                              title="Ce devis a déjà été facturé"
+                            >
+                              <FileCheck className="h-3.5 w-3.5" />
+                              <span>Facturé</span>
+                            </button>
+                          ) : quote.status === "accepted" ? (
                             <Button
                               variant="outline"
                               size="sm"
@@ -238,7 +259,7 @@ export default function DevisList() {
                               <ArrowRightLeft className="h-3.5 w-3.5" />
                               <span>Facturer</span>
                             </Button>
-                          )}
+                          ) : null}
                           <Button
                             variant="ghost"
                             size="icon"

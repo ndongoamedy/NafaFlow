@@ -12,6 +12,7 @@ import DevisLineEditor, { DevisLine } from "./DevisLineEditor";
 import { toast } from "sonner";
 import { ClientItem } from "@/lib/utils/state";
 import { fetchOrgSettings, OrgSettings, errorMessage } from "@/lib/utils/orgProfile";
+import { Switch } from "@/components/ui/switch";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 
@@ -80,8 +81,14 @@ export default function DevisForm() {
     }
   };
 
+  // TVA appliquée à ce devis (par défaut : réglage de l'organisation)
+  const [applyVat, setApplyVat] = useState(true);
+
   useEffect(() => {
-    fetchOrgSettings().then(setSettings);
+    fetchOrgSettings().then((s) => {
+      setSettings(s);
+      setApplyVat(s?.billing.applyVat ?? true);
+    });
     loadInitialData();
   }, []);
 
@@ -90,7 +97,7 @@ export default function DevisForm() {
   const [lines, setLines] = useState<DevisLine[]>([
     { id: "1", serviceId: null, description: "", quantity: 1, unitPrice: 0 },
   ]);
-  
+
   // New Client Inline Modal
   const [isNewClientOpen, setIsNewClientOpen] = useState(false);
   const [newClientName, setNewClientName] = useState("");
@@ -98,7 +105,6 @@ export default function DevisForm() {
   const [newClientPhone, setNewClientPhone] = useState("");
 
   // Calculations
-  const applyVat = settings?.billing.applyVat ?? true;
   const vatRate = settings?.billing.vat ?? 18;
   const subtotal = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
   const totalTTC = applyVat ? subtotal * (1 + vatRate / 100) : subtotal;
@@ -373,8 +379,19 @@ export default function DevisForm() {
             </div>
           </div>
 
+          {/* Toggle TVA pour ce devis */}
+          <div className="flex items-center justify-between bg-slate-50/60 border border-slate-100 rounded-xl px-4 py-3">
+            <div className="space-y-0.5">
+              <span className="text-xs font-bold text-slate-600 uppercase">Appliquer la TVA ({vatRate}%)</span>
+              <p className="text-[11px] text-slate-400 font-medium">
+                Inclure ou non la TVA sur ce devis. Par défaut : votre réglage dans Paramètres.
+              </p>
+            </div>
+            <Switch checked={applyVat} onCheckedChange={setApplyVat} />
+          </div>
+
           {/* Prestataires Line Editor */}
-          <DevisLineEditor lines={lines} onChange={setLines} />
+          <DevisLineEditor lines={lines} onChange={setLines} applyVat={applyVat} />
         </CardContent>
       </Card>
 

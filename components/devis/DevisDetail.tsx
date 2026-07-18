@@ -18,6 +18,7 @@ import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { useRouter, useSearchParams } from "next/navigation";
 import { generateDocumentPDF } from "@/lib/utils/pdf";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import DevisLineEditor, { DevisLine } from "./DevisLineEditor";
 
 interface DevisDetailProps {
@@ -32,6 +33,8 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
 
   const [quote, setQuote] = useState<DevisItem | null>(null);
   const [isConvertOpen, setIsConvertOpen] = useState(false);
+  const [alreadyInvoiced, setAlreadyInvoiced] = useState(false);
+  const [applyVatDoc, setApplyVatDoc] = useState(true); // TVA appliquée à ce devis
   const [settings, setSettings] = useState<OrgSettings | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -82,6 +85,14 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
       if (quoteErr) throw quoteErr;
 
       if (quoteData) {
+        // Ce devis a-t-il déjà été facturé ?
+        const { count: invCount } = await supabase
+          .schema("nafaflow")
+          .from("invoices")
+          .select("id", { count: "exact", head: true })
+          .eq("quote_id", actualQuoteId);
+        setAlreadyInvoiced((invCount || 0) > 0);
+
         // 3. Fetch quote lines
         const { data: linesData, error: linesErr } = await supabase
           .schema("nafaflow")
@@ -148,6 +159,9 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
       setEditIssueDate(quote.issueDate);
       setEditValidityDays(String(quote.validityDays ?? 15));
       setEditLines(quote.lines || []);
+      // Déduit si la TVA a été appliquée à ce devis (total stocké > sous-total HT)
+      const sub = (quote.lines || []).reduce((s, l) => s + l.quantity * l.unitPrice, 0);
+      setApplyVatDoc(quote.total > sub + 1);
     }
   }, [quote]);
 
@@ -194,9 +208,8 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
     }
 
     const subtotal = editLines.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-    const applyVat = settings?.billing?.applyVat ?? true;
     const vatRate = settings?.billing?.vat ?? 18;
-    const editTotal = applyVat ? subtotal * (1 + vatRate / 100) : subtotal;
+    const editTotal = applyVatDoc ? subtotal * (1 + vatRate / 100) : subtotal;
 
     try {
       const supabase = createBrowserClient();
@@ -283,13 +296,14 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
     return <div className="p-8 text-center text-slate-500 font-medium">Devis introuvable.</div>;
   }
 
-  const applyVat = settings?.billing?.applyVat ?? true;
-  const vatRate = settings?.billing?.vat ?? 18;
-
+  // En mode édition : le toggle pilote la TVA. En consultation : on déduit du total stocké.
+  const isEditingMode = quoteId === "modifier";
   const items = quote.lines || [];
   const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  const vat = applyVat ? Math.round(subtotal * (vatRate / 100)) : 0;
-  const total = subtotal + vat;
+  const applyVat = isEditingMode ? applyVatDoc : quote.total > subtotal + 1;
+  const vatRate = settings?.billing?.vat ?? 18;
+  const vat = applyVat ? (isEditingMode ? Math.round(subtotal * (vatRate / 100)) : quote.total - subtotal) : 0;
+  const total = isEditingMode ? subtotal + vat : quote.total;
 
   const year = quote ? new Date(quote.issueDate).getFullYear() : 0;
   const shortId = quote ? (quote.id.split("-")[0]?.slice(0, 4).toUpperCase() || quote.id.slice(0, 4).toUpperCase()) : "";
@@ -400,12 +414,16 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
             {/* Line items editor */}
             <Card className="bg-white border-slate-100 shadow-sm overflow-hidden">
               <CardContent className="p-0">
-                <div className="p-6 border-b border-slate-100">
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between gap-4">
                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                     Prestations & Articles
                   </h3>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs font-semibold text-slate-500">TVA ({vatRate}%)</span>
+                    <Switch checked={applyVatDoc} onCheckedChange={setApplyVatDoc} />
+                  </div>
                 </div>
-                <DevisLineEditor lines={editLines} onChange={setEditLines} />
+                <DevisLineEditor lines={editLines} onChange={setEditLines} applyVat={applyVatDoc} />
               </CardContent>
             </Card>
           </div>
@@ -506,14 +524,26 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
             </Button>
           )}
 
-          {quote.status === "accepted" && (
+          {quote.status === "accepted" && !alreadyInvoiced && (
             <Button
               type="button"
               onClick={() => setIsConvertOpen(true)}
               className="bg-[#16A34A] hover:bg-[#15803D] text-white font-bold h-9 rounded-lg text-xs flex items-center gap-1.5 active:scale-95 transition-all shadow-md shadow-emerald-700/10"
             >
               <ArrowRightLeft className="h-4 w-4" />
-              <span>Facturer par jalons</span>
+              <span>Facturer</span>
+            </Button>
+          )}
+
+          {alreadyInvoiced && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.push("/factures")}
+              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold border-emerald-200 h-9 rounded-lg text-xs flex items-center gap-1.5 active:scale-95 transition-all"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              <span>Déjà facturé — voir les factures</span>
             </Button>
           )}
 
@@ -677,21 +707,27 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
                   <span className="font-semibold text-slate-800">Envoyé au client</span>
                 </div>
               )}
-              {quote.status === "accepted" && (
+              {quote.status === "accepted" && !alreadyInvoiced && (
                 <div className="flex items-center gap-2">
                   <span className="size-2 rounded-full bg-emerald-500 shrink-0" />
-                  <span className="font-semibold text-slate-800">Devis accepté ! Prêt pour facturation de jalon.</span>
+                  <span className="font-semibold text-slate-800">Devis accepté ! Prêt à être facturé.</span>
+                </div>
+              )}
+              {alreadyInvoiced && (
+                <div className="flex items-center gap-2">
+                  <span className="size-2 rounded-full bg-emerald-500 shrink-0" />
+                  <span className="font-semibold text-slate-800">Devis facturé.</span>
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {quote.status === "accepted" && (
+          {quote.status === "accepted" && !alreadyInvoiced && (
             <Card className="bg-emerald-50/50 border-emerald-100 shadow-sm p-5 flex gap-3 text-xs">
               <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
               <div>
                 <h4 className="font-bold text-emerald-800">Prêt à facturer</h4>
-                <p className="text-emerald-700 mt-0.5">Le devis a été validé. Cliquez sur &quot;Facturer par jalons&quot; ci-dessus pour générer les factures d&apos;acompte et de solde correspondantes.</p>
+                <p className="text-emerald-700 mt-0.5">Le devis a été validé. Cliquez sur &quot;Facturer&quot; ci-dessus pour générer la facture correspondante.</p>
               </div>
             </Card>
           )}
