@@ -1038,7 +1038,16 @@ function ParametresContent() {
                         </p>
                       )}
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                        {/* Offre gratuite / essai */}
+                        <div className={`rounded-xl border p-4 ${inTrial ? "border-[#16A34A] bg-[#F0FDF4]/50" : "border-slate-200 bg-white"}`}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-bold text-slate-800">Gratuit</span>
+                            {inTrial && <CheckCircle2 className="h-4 w-4 text-[#16A34A]" />}
+                          </div>
+                          <span className="text-lg font-extrabold text-slate-900">0 F</span>
+                          <span className="text-xs text-slate-400 font-medium"> · essai 14 j</span>
+                        </div>
                         {(Object.keys(PLANS) as (keyof typeof PLANS)[]).map((key) => {
                           const plan = PLANS[key];
                           const current = subscription?.plan === key && isActive;

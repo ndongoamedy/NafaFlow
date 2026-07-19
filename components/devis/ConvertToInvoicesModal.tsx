@@ -9,6 +9,7 @@ import { CalendarDays, FileText, Wallet } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { errorMessage } from "@/lib/utils/orgProfile";
+import { encodeSchedule, ScheduleItem } from "@/lib/utils/schedule";
 
 interface ConvertToInvoicesModalProps {
   quoteId: string;
@@ -17,9 +18,10 @@ interface ConvertToInvoicesModalProps {
   onSuccess: () => void;
 }
 
-// Une seule facture est créée pour la totalité du devis. Les paiements en
-// plusieurs fois (jalons) se gèrent ensuite depuis la fiche facture, via des
-// encaissements partiels qui réduisent le solde dû jusqu'à 0.
+// Une seule facture est créée pour la totalité du devis. On peut y joindre un
+// ÉCHÉANCIER PRÉVISIONNEL (ce que le client doit verser et pour quand) — rien
+// n'est marqué « reçu » : les encaissements se saisissent ensuite, au fur et à
+// mesure, depuis la fiche facture.
 export default function ConvertToInvoicesModal({
   quoteId,
   quoteTotal,
@@ -29,10 +31,10 @@ export default function ConvertToInvoicesModal({
   const [singleDueDays, setSingleDueDays] = useState(30);
   const [converting, setConverting] = useState(false);
 
-  // Acompte / premier jalon éventuellement déjà versé par le client
-  const [hasDeposit, setHasDeposit] = useState(false);
-  const [depositAmount, setDepositAmount] = useState("");
-  const [depositMethod, setDepositMethod] = useState("Virement");
+  // Échéancier prévisionnel : acompte attendu + solde (pas encore reçus)
+  const [planJalons, setPlanJalons] = useState(false);
+  const [acompteAmount, setAcompteAmount] = useState("");
+  const [acompteDueDays, setAcompteDueDays] = useState(0);
 
   // Récupère le délai de paiement standard configuré dans Paramètres
   useEffect(() => {
@@ -67,14 +69,24 @@ export default function ConvertToInvoicesModal({
     return `${cleanPrefix}-${year}-${String(seq).padStart(3, "0")}`;
   };
 
-  const depositValue = hasDeposit ? Math.max(0, Math.round(parseFloat(depositAmount) || 0)) : 0;
+  const dateFromDays = (days: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+  const frDate = (iso: string) => {
+    const [y, m, d] = iso.split("-");
+    return `${d}/${m}/${y}`;
+  };
+
+  const acompteValue = planJalons
+    ? Math.max(0, Math.min(Math.round(parseFloat(acompteAmount) || 0), quoteTotal))
+    : 0;
+  const soldeValue = quoteTotal - acompteValue;
+  // L'échéancier n'a de sens que si l'acompte est strictement partiel.
+  const scheduleValid = planJalons && acompteValue > 0 && acompteValue < quoteTotal;
 
   const handleConvert = async () => {
-    if (depositValue > quoteTotal) {
-      toast.error(`L'acompte ne peut pas dépasser le total de la facture (${quoteTotal.toLocaleString()} F).`);
-      return;
-    }
-
     setConverting(true);
     try {
       const supabase = createBrowserClient();
@@ -107,17 +119,18 @@ export default function ConvertToInvoicesModal({
       const seq = (invoiceCount || 0) + 1;
 
       const issueDate = new Date().toISOString().slice(0, 10);
+      const dueDate = dateFromDays(Number(singleDueDays) || 30);
 
-      // 2. Facture unique : reprend fidèlement les lignes du devis (remise incluse)
-      const dueDateObj = new Date();
-      dueDateObj.setDate(dueDateObj.getDate() + (Number(singleDueDays) || 30));
-      const dueDate = dueDateObj.toISOString().slice(0, 10);
-
-      // Statut initial : si un acompte est saisi, la facture est envoyée puis
-      // marquée partiellement/entièrement payée selon le montant.
-      const initialStatus =
-        depositValue <= 0 ? "draft" :
-        depositValue >= quoteTotal ? "paid" : "partial";
+      // Échéancier prévisionnel (aucun encaissement : uniquement l'attendu)
+      const baseNote = `Facture issue du devis ${quoteRef}`;
+      let notes = baseNote;
+      if (scheduleValid) {
+        const schedule: ScheduleItem[] = [
+          { label: "Acompte", amount: acompteValue, dueDate: dateFromDays(Number(acompteDueDays) || 0) },
+          { label: "Solde", amount: soldeValue, dueDate: dueDate },
+        ];
+        notes = encodeSchedule(baseNote, schedule);
+      }
 
       const invoiceNumber = buildInvoiceNumber(prefix, year, seq);
       const { data: invoiceResult, error: invoiceInsertErr } = await supabase
@@ -128,11 +141,11 @@ export default function ConvertToInvoicesModal({
           client_id: quoteData.client_id,
           quote_id: quoteData.id,
           number: invoiceNumber,
-          status: initialStatus,
+          status: "draft",
           issue_date: issueDate,
           due_date: dueDate,
           total: quoteTotal,
-          notes: `Facture issue du devis ${quoteRef}`,
+          notes,
         })
         .select()
         .single();
@@ -174,43 +187,6 @@ export default function ConvertToInvoicesModal({
 
       if (lineInsertErr) throw lineInsertErr;
 
-      // 2b. Acompte (premier jalon) : encaissement partiel + écriture de caisse
-      if (depositValue > 0) {
-        const sharedId = crypto.randomUUID();
-        const { error: cashErr } = await supabase
-          .schema("nafaflow")
-          .from("cash_entries")
-          .insert({
-            id: sharedId,
-            org_id: quoteData.org_id,
-            entry_date: issueDate,
-            type: "in",
-            amount: depositValue,
-            label: `Acompte facture ${invoiceNumber} — devis ${quoteRef}`,
-            category: "Ventes",
-            link_type: "invoice",
-            link_id: invoiceResult.id,
-          });
-        if (cashErr) throw cashErr;
-
-        const { error: payErr } = await supabase
-          .schema("nafaflow")
-          .from("payments")
-          .insert({
-            id: sharedId,
-            org_id: quoteData.org_id,
-            invoice_id: invoiceResult.id,
-            amount: depositValue,
-            paid_at: issueDate,
-            method: depositMethod,
-            note: "Acompte à la commande",
-          });
-        if (payErr) {
-          await supabase.schema("nafaflow").from("cash_entries").delete().eq("id", sharedId);
-          throw payErr;
-        }
-      }
-
       // 3. Mark the quote as accepted
       const { error: quoteUpdateErr } = await supabase
         .schema("nafaflow")
@@ -221,8 +197,8 @@ export default function ConvertToInvoicesModal({
       if (quoteUpdateErr) throw quoteUpdateErr;
 
       toast.success(
-        depositValue > 0
-          ? `Facture créée avec un acompte de ${depositValue.toLocaleString()} F enregistré.`
+        scheduleValid
+          ? `Facture créée avec un échéancier prévisionnel (acompte + solde).`
           : `Le devis ${quoteRef} a été converti en facture.`
       );
       onSuccess();
@@ -233,16 +209,6 @@ export default function ConvertToInvoicesModal({
     } finally {
       setConverting(false);
     }
-  };
-
-  // Projected date helper
-  const getProjectedDateString = (days: number) => {
-    const date = new Date();
-    date.setDate(date.getDate() + days);
-    const day = String(date.getDate()).padStart(2, "0");
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const year = date.getFullYear();
-    return `${day}/${month}/${year}`;
   };
 
   return (
@@ -281,7 +247,7 @@ export default function ConvertToInvoicesModal({
           <div className="flex-1">
             <span className="text-sm font-semibold text-slate-800">Échéance de paiement</span>
             <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-              Date limite de règlement de la facture.
+              Date limite de règlement (du solde si vous prévoyez un acompte).
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -298,74 +264,86 @@ export default function ConvertToInvoicesModal({
             </div>
             <span className="text-xs font-semibold text-slate-500 flex items-center gap-1.5 whitespace-nowrap">
               <CalendarDays className="h-3.5 w-3.5 text-slate-400" />
-              {getProjectedDateString(singleDueDays)}
+              {frDate(dateFromDays(singleDueDays))}
             </span>
           </div>
         </div>
 
-        {/* Jalons / paiements partiels : acompte optionnel à la commande */}
+        {/* Jalons : échéancier prévisionnel (attendu, PAS encore reçu) */}
         <div className="rounded-xl border border-slate-100 bg-slate-50/40 p-4 space-y-3">
           <label className="flex items-start gap-3 cursor-pointer">
             <input
               type="checkbox"
-              checked={hasDeposit}
-              onChange={(e) => setHasDeposit(e.target.checked)}
+              checked={planJalons}
+              onChange={(e) => setPlanJalons(e.target.checked)}
               className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#16A34A] focus:ring-[#16A34A]"
             />
             <div className="space-y-0.5">
               <span className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
                 <Wallet className="h-4 w-4 text-slate-400" />
-                Paiement en plusieurs fois (jalons)
+                Prévoir un paiement en plusieurs fois (jalons)
               </span>
               <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                Le client a déjà versé un acompte ? Enregistrez-le ici. Les jalons
-                suivants s&apos;ajouteront depuis la fiche facture — le solde et le
-                statut se mettent à jour automatiquement.
+                Définit ce que le client <span className="font-semibold">doit verser</span> et pour quand
+                (acompte puis solde). Rien n&apos;est encaissé maintenant : vous enregistrerez
+                chaque versement depuis la fiche facture quand il arrivera.
               </p>
             </div>
           </label>
 
-          {hasDeposit && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 pl-7">
-              <div className="space-y-1">
-                <Label htmlFor="deposit-amount" className="text-[10px] font-bold text-slate-400 uppercase">
-                  Acompte reçu (FCFA)
-                </Label>
-                <input
-                  id="deposit-amount"
-                  type="number"
-                  min={0}
-                  max={quoteTotal}
-                  value={depositAmount}
-                  onChange={(e) => setDepositAmount(e.target.value)}
-                  placeholder="Ex : 50000"
-                  className="w-full h-9 px-3 rounded-lg border border-slate-200 text-sm font-semibold focus:outline-none focus:border-[#16A34A] focus:ring-1 focus:ring-[#16A34A]"
-                />
+          {planJalons && (
+            <div className="pl-7 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="acompte-amount" className="text-[10px] font-bold text-slate-400 uppercase">
+                    Acompte attendu (FCFA)
+                  </Label>
+                  <input
+                    id="acompte-amount"
+                    type="number"
+                    min={0}
+                    max={quoteTotal}
+                    value={acompteAmount}
+                    onChange={(e) => setAcompteAmount(e.target.value)}
+                    placeholder="Ex : 300000"
+                    className="w-full h-9 px-3 rounded-lg border border-slate-200 text-sm font-semibold focus:outline-none focus:border-[#16A34A] focus:ring-1 focus:ring-[#16A34A]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="acompte-due" className="text-[10px] font-bold text-slate-400 uppercase">
+                    Acompte attendu sous (jours)
+                  </Label>
+                  <div className="relative flex items-center bg-white border border-slate-200 rounded-lg px-3 h-9">
+                    <input
+                      id="acompte-due"
+                      type="number"
+                      min={0}
+                      value={acompteDueDays}
+                      onChange={(e) => setAcompteDueDays(parseInt(e.target.value) || 0)}
+                      className="bg-transparent border-0 outline-0 text-sm font-semibold w-full focus:ring-0 focus:outline-none"
+                    />
+                    <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">
+                      {frDate(dateFromDays(acompteDueDays))}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="deposit-method" className="text-[10px] font-bold text-slate-400 uppercase">
-                  Moyen de paiement
-                </Label>
-                <select
-                  id="deposit-method"
-                  value={depositMethod}
-                  onChange={(e) => setDepositMethod(e.target.value)}
-                  className="w-full h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm font-semibold focus:outline-none focus:border-[#16A34A] focus:ring-1 focus:ring-[#16A34A]"
-                >
-                  <option value="Espèces">Espèces</option>
-                  <option value="Virement">Virement</option>
-                  <option value="Wave">Wave</option>
-                  <option value="Orange Money">Orange Money</option>
-                  <option value="Chèque">Chèque</option>
-                  <option value="Autre">Autre</option>
-                </select>
-              </div>
-              {depositValue > 0 && (
-                <p className="sm:col-span-2 text-[11px] font-semibold text-slate-500">
-                  Reste à payer après acompte :{" "}
-                  <span className="text-slate-800 font-bold">
-                    {Math.max(0, quoteTotal - depositValue).toLocaleString()} F
-                  </span>
+
+              {/* Aperçu de l'échéancier */}
+              {scheduleValid ? (
+                <div className="rounded-lg border border-slate-100 bg-white divide-y divide-slate-100 text-xs">
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="font-semibold text-slate-600">Acompte — avant le {frDate(dateFromDays(acompteDueDays))}</span>
+                    <span className="font-bold text-slate-800 tabular-nums"><AmountFCFA amount={acompteValue} /></span>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="font-semibold text-slate-600">Solde — avant le {frDate(dateFromDays(singleDueDays))}</span>
+                    <span className="font-bold text-slate-800 tabular-nums"><AmountFCFA amount={soldeValue} /></span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[11px] font-medium text-amber-600">
+                  Saisissez un acompte inférieur au total pour générer l&apos;échéancier.
                 </p>
               )}
             </div>

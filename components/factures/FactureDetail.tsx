@@ -15,6 +15,7 @@ import DateDisplay from "@/components/shared/DateDisplay";
 import ReminderPanel from "./ReminderPanel";
 import { Label } from "@/components/ui/label";
 import DevisLineEditor, { DevisLine, DISCOUNT_LABEL } from "../devis/DevisLineEditor";
+import { decodeSchedule, computeScheduleStatus, ScheduleItem } from "@/lib/utils/schedule";
 import { formatFCFA, formatDate } from "@/lib/utils/format";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
@@ -80,6 +81,7 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
   const [editLines, setEditLines] = useState<DevisLine[]>([]);
   const [editDiscount, setEditDiscount] = useState(0);
   const [discount, setDiscount] = useState(0); // remise de la facture chargée (consultation)
+  const [schedule, setSchedule] = useState<ScheduleItem[]>([]); // échéancier prévisionnel
   const [applyVatDoc, setApplyVatDoc] = useState(true); // TVA appliquée à cette facture
   const [clients, setClients] = useState<ClientItem[]>([]);
 
@@ -190,6 +192,9 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
         const lines = allLines.filter((l) => l.quantity * l.unitPrice >= 0);
         const loadedDiscount = discountLine ? Math.abs(discountLine.quantity * discountLine.unitPrice) : 0;
         setDiscount(loadedDiscount);
+
+        // Échéancier prévisionnel éventuel (stocké dans notes)
+        setSchedule(decodeSchedule(invData.notes));
 
         // Map database payments to InvoicePayment structure
         const payments: InvoicePayment[] = (paymentsData || []).map((p) => ({
@@ -1309,6 +1314,44 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
               )}
             </CardContent>
           </Card>
+
+          {/* Échéancier prévisionnel (jalons attendus, pas encore reçus) */}
+          {schedule.length > 0 && (
+            <Card className="bg-white border-slate-100 shadow-sm overflow-hidden">
+              <CardHeader className="pb-3 border-b border-slate-50">
+                <CardTitle className="text-xs font-bold text-slate-800 uppercase tracking-wider">Échéancier prévisionnel</CardTitle>
+              </CardHeader>
+              <CardContent className="p-5 space-y-2.5">
+                <p className="text-[10px] text-slate-400 font-medium">
+                  Ce que le client doit verser, et pour quand. Les versements réels se saisissent ci-dessus.
+                </p>
+                {computeScheduleStatus(schedule, totalPaid).map((jalon, idx) => {
+                  const badge =
+                    jalon.status === "recu"
+                      ? { txt: "Reçu", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" }
+                      : jalon.status === "partiel"
+                      ? { txt: "Partiel", cls: "bg-amber-50 text-amber-700 border-amber-200" }
+                      : { txt: "En attente", cls: "bg-slate-100 text-slate-500 border-slate-200" };
+                  return (
+                    <div key={idx} className="flex items-center justify-between gap-2 p-2.5 rounded-lg border border-slate-100 bg-slate-50/40">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-slate-700">{jalon.label}</span>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${badge.cls}`}>{badge.txt}</span>
+                        </div>
+                        {jalon.dueDate && (
+                          <span className="text-[10px] text-slate-400 font-medium">avant le <DateDisplay date={jalon.dueDate} /></span>
+                        )}
+                      </div>
+                      <span className="text-xs font-bold text-slate-800 tabular-nums shrink-0">
+                        <AmountFCFA amount={jalon.amount} />
+                      </span>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Status Progression Flow / Alert Info */}
           <Card className="bg-white border-slate-100 shadow-sm">

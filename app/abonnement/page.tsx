@@ -131,7 +131,39 @@ function AbonnementContent() {
             </div>
 
             {/* Plans */}
-            <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+            <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+              {/* Offre gratuite / essai */}
+              <div className={`bg-white rounded-2xl border p-7 shadow-sm relative ${state?.inTrial ? "border-[#16A34A] shadow-emerald-700/5" : "border-slate-200"}`}>
+                {state?.inTrial && (
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#16A34A] text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full">
+                    Plan actuel
+                  </span>
+                )}
+                <h3 className="text-lg font-bold text-slate-800">Gratuit</h3>
+                <div className="flex items-baseline gap-1 mt-2 mb-5">
+                  <span className="text-3xl font-extrabold text-slate-800 tracking-tight">0</span>
+                  <span className="text-sm font-semibold text-slate-400">FCFA</span>
+                </div>
+                <ul className="space-y-2.5 mb-6">
+                  {[
+                    "Essai de 14 jours",
+                    "Toutes les fonctionnalités",
+                    "Accès complet pendant l'essai",
+                    "Sans carte bancaire",
+                  ].map((f) => (
+                    <li key={f} className="flex items-start gap-2.5 text-sm text-slate-600">
+                      <Check className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="w-full h-11 rounded-lg font-bold text-sm flex items-center justify-center gap-2 bg-slate-50 border border-slate-200 text-slate-500">
+                  {state?.inTrial
+                    ? `Essai actif — ${state.trialDaysLeft} j restant${state.trialDaysLeft > 1 ? "s" : ""}`
+                    : "Essai terminé"}
+                </div>
+              </div>
+
               {(Object.keys(PLANS) as (keyof typeof PLANS)[]).map((planId) => {
                 const plan = PLANS[planId];
                 const isBusiness = planId === "business";
