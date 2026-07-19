@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileDown, ArrowLeft, Calendar, User, FileText, CheckCircle2, ArrowRightLeft, CheckSquare, Edit, Save, AlertTriangle } from "lucide-react";
+import { FileDown, ArrowLeft, Calendar, User, FileText, CheckCircle2, ArrowRightLeft, Edit, Save, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import StatusBadge from "@/components/shared/StatusBadge";
 import AmountFCFA from "@/components/shared/AmountFCFA";
@@ -19,6 +19,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { generateDocumentPDF } from "@/lib/utils/pdf";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import DevisLineEditor, { DevisLine, DISCOUNT_LABEL } from "./DevisLineEditor";
 
 interface DevisDetailProps {
@@ -292,25 +298,37 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
     }
   };
 
-  const handleAcceptQuote = async () => {
+  // Changement de statut du devis (brouillon / envoyé / accepté / refusé)
+  const handleStatusChange = async (frontendStatus: string) => {
     if (!quote) return;
+
+    const dbStatus =
+      frontendStatus === "brouillon" ? "draft" :
+      frontendStatus === "envoyée" ? "sent" :
+      frontendStatus === "refusé" ? "rejected" :
+      frontendStatus === "accepted" ? "accepted" :
+      frontendStatus;
 
     try {
       const supabase = createBrowserClient();
       const { error } = await supabase
         .schema("nafaflow")
         .from("quotes")
-        .update({ status: "accepted" })
+        .update({ status: dbStatus })
         .eq("id", quote.id);
 
       if (error) throw error;
 
-      toast.success(`Le devis a été accepté.`);
+      const label =
+        dbStatus === "accepted" ? "accepté" :
+        dbStatus === "rejected" ? "refusé" :
+        dbStatus === "sent" ? "envoyé" : "remis en brouillon";
+      toast.success(`Devis marqué comme ${label}.`);
       loadData();
     } catch (err: unknown) {
       console.error(err);
       const message = errorMessage(err);
-      toast.error(`Erreur lors de l'acceptation : ${message}`);
+      toast.error(`Erreur lors du changement de statut : ${message}`);
     }
   };
 
@@ -547,7 +565,47 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-xl font-bold text-slate-800 tracking-tight">{quoteRef}</h2>
-              <StatusBadge status={quote.status} />
+
+              {/* Dropdown status selector */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors shadow-sm cursor-pointer group active:scale-95">
+                    <span className="text-[10px] font-bold text-slate-400 mr-1 uppercase">Statut :</span>
+                    <StatusBadge status={quote.status} className="border-0 p-0 text-[10px]" />
+                    <span className="text-[9px] text-slate-400 font-bold group-hover:text-slate-600 transition-colors ml-0.5">▼</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="bg-white border border-slate-100 shadow-lg rounded-xl p-1 text-slate-700 min-w-32 z-50">
+                  <DropdownMenuItem
+                    onClick={() => handleStatusChange("brouillon")}
+                    className="flex items-center gap-2 px-3 py-2 text-xs font-semibold hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
+                  >
+                    <span className="h-2 w-2 rounded-full bg-slate-400" />
+                    <span>Brouillon</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => handleStatusChange("envoyée")}
+                    className="flex items-center gap-2 px-3 py-2 text-xs font-semibold hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
+                  >
+                    <span className="h-2 w-2 rounded-full bg-amber-500" />
+                    <span>Envoyé</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => handleStatusChange("accepted")}
+                    className="flex items-center gap-2 px-3 py-2 text-xs font-semibold hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
+                  >
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                    <span>Accepté</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => handleStatusChange("refusé")}
+                    className="flex items-center gap-2 px-3 py-2 text-xs font-semibold hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
+                  >
+                    <span className="h-2 w-2 rounded-full bg-rose-500" />
+                    <span>Refusé</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
             <p className="text-xs text-slate-400 font-medium mt-0.5">
               Détails du devis et facturation des jalons
@@ -557,19 +615,6 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
 
         {/* Global actions */}
         <div className="flex items-center gap-2 shrink-0">
-          {quote.status !== "accepted" && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleAcceptQuote}
-              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold border-emerald-200 h-9 rounded-lg text-xs flex items-center gap-1.5 active:scale-95 transition-all"
-            >
-              <CheckSquare className="h-4 w-4" />
-              <span>Marquer Accepté</span>
-            </Button>
-          )}
-
           {quote.status === "accepted" && !alreadyInvoiced && (
             <Button
               type="button"

@@ -15,9 +15,13 @@ export function buildCsv<T extends Record<string, unknown>>(
   columns: { key: keyof T; header: string }[],
   rows: T[]
 ): string {
-  const headerLine = columns.map((c) => escapeCell(c.header)).join(",");
+  // Point-virgule : séparateur attendu par Excel en configuration française,
+  // pour que le fichier s'ouvre directement en colonnes (l'import détecte
+  // automatiquement virgule ou point-virgule de toute façon).
+  const sep = ";";
+  const headerLine = columns.map((c) => escapeCell(c.header)).join(sep);
   const dataLines = rows.map((row) =>
-    columns.map((c) => escapeCell(row[c.key])).join(",")
+    columns.map((c) => escapeCell(row[c.key])).join(sep)
   );
   // BOM UTF-8 pour qu'Excel ouvre correctement les accents.
   return "﻿" + [headerLine, ...dataLines].join("\r\n");
@@ -44,6 +48,26 @@ export function downloadCsv(filename: string, content: string): void {
 export function parseCsv(text: string): Record<string, string>[] {
   // Retire un éventuel BOM.
   const clean = text.replace(/^﻿/, "");
+
+  // Détecte le séparateur : virgule, point-virgule (Excel FR) ou tabulation.
+  // On compte sur la 1re ligne (hors guillemets) et on prend le plus fréquent.
+  const firstLine = clean.split(/\r?\n/, 1)[0] || "";
+  const countOutsideQuotes = (sep: string) => {
+    let n = 0, q = false;
+    for (const c of firstLine) {
+      if (c === '"') q = !q;
+      else if (c === sep && !q) n++;
+    }
+    return n;
+  };
+  const candidates: [string, number][] = [
+    [",", countOutsideQuotes(",")],
+    [";", countOutsideQuotes(";")],
+    ["\t", countOutsideQuotes("\t")],
+  ];
+  candidates.sort((a, b) => b[1] - a[1]);
+  const delimiter = candidates[0][1] > 0 ? candidates[0][0] : ",";
+
   const rows: string[][] = [];
   let field = "";
   let row: string[] = [];
@@ -64,7 +88,7 @@ export function parseCsv(text: string): Record<string, string>[] {
       }
     } else if (char === '"') {
       inQuotes = true;
-    } else if (char === ",") {
+    } else if (char === delimiter) {
       row.push(field);
       field = "";
     } else if (char === "\n" || char === "\r") {

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import AmountFCFA from "@/components/shared/AmountFCFA";
 import { toast } from "sonner";
 import { CalendarDays, FileText, Wallet } from "lucide-react";
+import { Label } from "@/components/ui/label";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { errorMessage } from "@/lib/utils/orgProfile";
 
@@ -27,6 +28,11 @@ export default function ConvertToInvoicesModal({
 }: ConvertToInvoicesModalProps) {
   const [singleDueDays, setSingleDueDays] = useState(30);
   const [converting, setConverting] = useState(false);
+
+  // Acompte / premier jalon éventuellement déjà versé par le client
+  const [hasDeposit, setHasDeposit] = useState(false);
+  const [depositAmount, setDepositAmount] = useState("");
+  const [depositMethod, setDepositMethod] = useState("Virement");
 
   // Récupère le délai de paiement standard configuré dans Paramètres
   useEffect(() => {
@@ -61,7 +67,14 @@ export default function ConvertToInvoicesModal({
     return `${cleanPrefix}-${year}-${String(seq).padStart(3, "0")}`;
   };
 
+  const depositValue = hasDeposit ? Math.max(0, Math.round(parseFloat(depositAmount) || 0)) : 0;
+
   const handleConvert = async () => {
+    if (depositValue > quoteTotal) {
+      toast.error(`L'acompte ne peut pas dépasser le total de la facture (${quoteTotal.toLocaleString()} F).`);
+      return;
+    }
+
     setConverting(true);
     try {
       const supabase = createBrowserClient();
@@ -100,6 +113,13 @@ export default function ConvertToInvoicesModal({
       dueDateObj.setDate(dueDateObj.getDate() + (Number(singleDueDays) || 30));
       const dueDate = dueDateObj.toISOString().slice(0, 10);
 
+      // Statut initial : si un acompte est saisi, la facture est envoyée puis
+      // marquée partiellement/entièrement payée selon le montant.
+      const initialStatus =
+        depositValue <= 0 ? "draft" :
+        depositValue >= quoteTotal ? "paid" : "partial";
+
+      const invoiceNumber = buildInvoiceNumber(prefix, year, seq);
       const { data: invoiceResult, error: invoiceInsertErr } = await supabase
         .schema("nafaflow")
         .from("invoices")
@@ -107,8 +127,8 @@ export default function ConvertToInvoicesModal({
           org_id: quoteData.org_id,
           client_id: quoteData.client_id,
           quote_id: quoteData.id,
-          number: buildInvoiceNumber(prefix, year, seq),
-          status: "draft",
+          number: invoiceNumber,
+          status: initialStatus,
           issue_date: issueDate,
           due_date: dueDate,
           total: quoteTotal,
@@ -154,6 +174,43 @@ export default function ConvertToInvoicesModal({
 
       if (lineInsertErr) throw lineInsertErr;
 
+      // 2b. Acompte (premier jalon) : encaissement partiel + écriture de caisse
+      if (depositValue > 0) {
+        const sharedId = crypto.randomUUID();
+        const { error: cashErr } = await supabase
+          .schema("nafaflow")
+          .from("cash_entries")
+          .insert({
+            id: sharedId,
+            org_id: quoteData.org_id,
+            entry_date: issueDate,
+            type: "in",
+            amount: depositValue,
+            label: `Acompte facture ${invoiceNumber} — devis ${quoteRef}`,
+            category: "Ventes",
+            link_type: "invoice",
+            link_id: invoiceResult.id,
+          });
+        if (cashErr) throw cashErr;
+
+        const { error: payErr } = await supabase
+          .schema("nafaflow")
+          .from("payments")
+          .insert({
+            id: sharedId,
+            org_id: quoteData.org_id,
+            invoice_id: invoiceResult.id,
+            amount: depositValue,
+            paid_at: issueDate,
+            method: depositMethod,
+            note: "Acompte à la commande",
+          });
+        if (payErr) {
+          await supabase.schema("nafaflow").from("cash_entries").delete().eq("id", sharedId);
+          throw payErr;
+        }
+      }
+
       // 3. Mark the quote as accepted
       const { error: quoteUpdateErr } = await supabase
         .schema("nafaflow")
@@ -163,7 +220,11 @@ export default function ConvertToInvoicesModal({
 
       if (quoteUpdateErr) throw quoteUpdateErr;
 
-      toast.success(`Le devis ${quoteRef} a été converti en facture.`);
+      toast.success(
+        depositValue > 0
+          ? `Facture créée avec un acompte de ${depositValue.toLocaleString()} F enregistré.`
+          : `Le devis ${quoteRef} a été converti en facture.`
+      );
       onSuccess();
       onClose();
     } catch (err: unknown) {
@@ -242,15 +303,73 @@ export default function ConvertToInvoicesModal({
           </div>
         </div>
 
-        {/* Jalons / paiements partiels : explication */}
-        <div className="flex items-start gap-3 p-3.5 rounded-xl border border-slate-100 bg-slate-50/40">
-          <Wallet className="h-4.5 w-4.5 text-slate-400 shrink-0 mt-0.5" />
-          <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-            <span className="font-bold text-slate-700">Paiement en plusieurs fois (jalons) ?</span>{" "}
-            Pas besoin de créer plusieurs factures : depuis la fiche de cette facture,
-            enregistrez chaque acompte au fur et à mesure. Le solde restant et le statut
-            (partiellement payée → payée) se mettent à jour automatiquement.
-          </p>
+        {/* Jalons / paiements partiels : acompte optionnel à la commande */}
+        <div className="rounded-xl border border-slate-100 bg-slate-50/40 p-4 space-y-3">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={hasDeposit}
+              onChange={(e) => setHasDeposit(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#16A34A] focus:ring-[#16A34A]"
+            />
+            <div className="space-y-0.5">
+              <span className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
+                <Wallet className="h-4 w-4 text-slate-400" />
+                Paiement en plusieurs fois (jalons)
+              </span>
+              <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                Le client a déjà versé un acompte ? Enregistrez-le ici. Les jalons
+                suivants s&apos;ajouteront depuis la fiche facture — le solde et le
+                statut se mettent à jour automatiquement.
+              </p>
+            </div>
+          </label>
+
+          {hasDeposit && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 pl-7">
+              <div className="space-y-1">
+                <Label htmlFor="deposit-amount" className="text-[10px] font-bold text-slate-400 uppercase">
+                  Acompte reçu (FCFA)
+                </Label>
+                <input
+                  id="deposit-amount"
+                  type="number"
+                  min={0}
+                  max={quoteTotal}
+                  value={depositAmount}
+                  onChange={(e) => setDepositAmount(e.target.value)}
+                  placeholder="Ex : 50000"
+                  className="w-full h-9 px-3 rounded-lg border border-slate-200 text-sm font-semibold focus:outline-none focus:border-[#16A34A] focus:ring-1 focus:ring-[#16A34A]"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="deposit-method" className="text-[10px] font-bold text-slate-400 uppercase">
+                  Moyen de paiement
+                </Label>
+                <select
+                  id="deposit-method"
+                  value={depositMethod}
+                  onChange={(e) => setDepositMethod(e.target.value)}
+                  className="w-full h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm font-semibold focus:outline-none focus:border-[#16A34A] focus:ring-1 focus:ring-[#16A34A]"
+                >
+                  <option value="Espèces">Espèces</option>
+                  <option value="Virement">Virement</option>
+                  <option value="Wave">Wave</option>
+                  <option value="Orange Money">Orange Money</option>
+                  <option value="Chèque">Chèque</option>
+                  <option value="Autre">Autre</option>
+                </select>
+              </div>
+              {depositValue > 0 && (
+                <p className="sm:col-span-2 text-[11px] font-semibold text-slate-500">
+                  Reste à payer après acompte :{" "}
+                  <span className="text-slate-800 font-bold">
+                    {Math.max(0, quoteTotal - depositValue).toLocaleString()} F
+                  </span>
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
