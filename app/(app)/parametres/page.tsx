@@ -1,19 +1,23 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, Receipt, MessageSquare, Users, Save, Upload, Plus, Trash2, HelpCircle, Edit, KeyRound, Copy, AlertCircle } from "lucide-react";
+import { Building2, Receipt, MessageSquare, Users, Save, Upload, Plus, Trash2, HelpCircle, Edit, KeyRound, Copy, AlertCircle, CreditCard, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import ConfirmDeleteModal from "@/components/shared/ConfirmDeleteModal";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { parseOrgTaxId, buildOrgTaxId, errorMessage, toMonthlyAmount } from "@/lib/utils/orgProfile";
+import { fetchSubscription, SubscriptionState, PLANS } from "@/lib/utils/subscription";
+import { formatFCFA } from "@/lib/utils/format";
 
 // Mapped types for settings
 interface TeamMember {
@@ -31,9 +35,25 @@ const ROLE_DB_TO_UI: Record<string, UIRole> = {
   VIEWER: "Lecture seule",
 };
 
-export default function ParametresPage() {
+function ParametresContent() {
+  const searchParams = useSearchParams();
   const [orgId, setOrgId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Onglet actif (pilotable par ?tab= pour les liens du menu profil)
+  const [activeTab, setActiveTab] = useState("societe");
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (t && ["societe", "facturation", "templates", "equipe", "abonnement"].includes(t)) {
+      setActiveTab(t);
+    }
+  }, [searchParams]);
+
+  // Abonnement
+  const [subscription, setSubscription] = useState<SubscriptionState | null>(null);
+  useEffect(() => {
+    fetchSubscription().then(setSubscription);
+  }, []);
 
   // Form States
   const [companyName, setCompanyName] = useState("");
@@ -419,7 +439,7 @@ export default function ParametresPage() {
         </Button>
       </div>
 
-      <Tabs defaultValue="societe" className="w-full flex flex-col lg:flex-row gap-6 items-start">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col lg:flex-row gap-6 items-start">
         {/* Left Side Tab Navigation */}
         <TabsList className="flex flex-row lg:flex-col w-full lg:w-64 bg-white border border-slate-100 rounded-xl p-1.5 shadow-sm space-y-0 lg:space-y-1 overflow-x-auto lg:overflow-x-visible">
           <TabsTrigger
@@ -449,6 +469,13 @@ export default function ParametresPage() {
           >
             <Users className="h-4 w-4" />
             <span>Gestion de l&apos;équipe</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="abonnement"
+            className="flex items-center gap-2 px-3 py-2.5 rounded-lg justify-start text-xs font-bold text-slate-500 hover:text-slate-800 data-[state=active]:bg-[#F0FDF4] data-[state=active]:text-[#16A34A] transition-all w-full shrink-0"
+          >
+            <CreditCard className="h-4 w-4" />
+            <span>Abonnement</span>
           </TabsTrigger>
         </TabsList>
 
@@ -958,6 +985,94 @@ export default function ParametresPage() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Abonnement */}
+          <TabsContent value="abonnement" className="space-y-4 outline-none">
+            <Card className="bg-white border-slate-100 shadow-sm">
+              <CardContent className="p-6 space-y-5">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Mon abonnement</h3>
+                  <p className="text-xs text-slate-400 font-medium mt-1">
+                    Gérez votre formule NafaFlow et votre facturation.
+                  </p>
+                </div>
+
+                {(() => {
+                  const inTrial = subscription?.inTrial;
+                  const isActive = subscription?.isActive;
+                  const planLabel = subscription
+                    ? (PLANS[subscription.plan as keyof typeof PLANS]?.label
+                        || (isActive ? "Abonnement actif" : inTrial ? "Essai gratuit" : "Aucun abonnement actif"))
+                    : "—";
+                  const badgeClass = isActive
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : inTrial
+                    ? "bg-amber-50 text-amber-700 border-amber-200"
+                    : "bg-rose-50 text-rose-700 border-rose-200";
+                  const statusText = isActive
+                    ? "Actif"
+                    : inTrial
+                    ? `Essai — ${subscription?.trialDaysLeft ?? 0} jour(s) restant(s)`
+                    : "Inactif";
+                  return (
+                    <div className="rounded-xl border border-slate-100 bg-slate-50/40 p-5 space-y-4">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex items-center gap-3">
+                          <div className="h-11 w-11 rounded-xl bg-[#F0FDF4] flex items-center justify-center shrink-0">
+                            <CreditCard className="h-5 w-5 text-[#16A34A]" />
+                          </div>
+                          <div>
+                            <span className="block text-base font-bold text-slate-800">{planLabel}</span>
+                            <span className="text-xs text-slate-400 font-medium">Formule actuelle</span>
+                          </div>
+                        </div>
+                        <span className={`text-[11px] font-bold px-3 py-1 rounded-full border ${badgeClass}`}>
+                          {statusText}
+                        </span>
+                      </div>
+
+                      {isActive && subscription?.currentPeriodEnd && (
+                        <p className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                          Prochaine échéance : {subscription.currentPeriodEnd.toLocaleDateString("fr-FR")}
+                        </p>
+                      )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        {(Object.keys(PLANS) as (keyof typeof PLANS)[]).map((key) => {
+                          const plan = PLANS[key];
+                          const current = subscription?.plan === key && isActive;
+                          return (
+                            <div
+                              key={key}
+                              className={`rounded-xl border p-4 ${current ? "border-[#16A34A] bg-[#F0FDF4]/50" : "border-slate-200 bg-white"}`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-bold text-slate-800">{plan.label}</span>
+                                {current && <CheckCircle2 className="h-4 w-4 text-[#16A34A]" />}
+                              </div>
+                              <span className="text-lg font-extrabold text-slate-900">{formatFCFA(plan.price)}</span>
+                              <span className="text-xs text-slate-400 font-medium"> / mois</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <Button
+                        asChild
+                        className="w-full bg-[#16A34A] hover:bg-[#15803D] text-white font-bold h-11 rounded-lg text-sm flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-md shadow-emerald-700/10"
+                      >
+                        <Link href="/abonnement">
+                          <CreditCard className="h-4 w-4" />
+                          <span>{isActive ? "Gérer mon abonnement" : "Choisir un abonnement"}</span>
+                        </Link>
+                      </Button>
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </div>
       </Tabs>
 
@@ -1093,5 +1208,13 @@ export default function ParametresPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function ParametresPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-slate-500 font-medium">Chargement des paramètres...</div>}>
+      <ParametresContent />
+    </Suspense>
   );
 }

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileDown, ArrowLeft, Calendar, User, FileText, CheckCircle2, ArrowRightLeft, Edit, Save, AlertTriangle } from "lucide-react";
+import { FileDown, ArrowLeft, Calendar, User, FileText, CheckCircle2, XCircle, ArrowRightLeft, Edit, Save, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import StatusBadge from "@/components/shared/StatusBadge";
 import AmountFCFA from "@/components/shared/AmountFCFA";
@@ -615,6 +615,31 @@ export default function DevisDetail({ quoteId }: DevisDetailProps) {
 
         {/* Global actions */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* Décision rapide : Accepter / Refuser tant que le devis n'est pas tranché */}
+          {quote.status !== "accepted" && quote.status !== "refusé" && !alreadyInvoiced && (
+            <>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => handleStatusChange("accepted")}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9 rounded-lg text-xs flex items-center gap-1.5 active:scale-95 transition-all shadow-md shadow-emerald-700/10"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                <span>Accepter</span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => handleStatusChange("refusé")}
+                className="bg-white hover:bg-rose-50 text-rose-600 font-bold border-rose-200 h-9 rounded-lg text-xs flex items-center gap-1.5 active:scale-95 transition-all"
+              >
+                <XCircle className="h-4 w-4" />
+                <span>Refuser</span>
+              </Button>
+            </>
+          )}
+
           {quote.status === "accepted" && !alreadyInvoiced && (
             <Button
               type="button"

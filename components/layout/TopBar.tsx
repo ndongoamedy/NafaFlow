@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { LogOut, User, Building2, ChevronDown } from "lucide-react";
+import { LogOut, User, Building2, ChevronDown, CreditCard } from "lucide-react";
 import GlobalSearch from "./GlobalSearch";
 import {
   DropdownMenu,
@@ -134,19 +134,26 @@ export default function TopBar() {
             <DropdownMenuSeparator className="bg-slate-100" />
             
             <DropdownMenuItem asChild className="flex items-center gap-2 cursor-pointer text-slate-600 focus:bg-slate-50 focus:text-slate-800 py-2">
-              <Link href="/parametres">
+              <Link href="/parametres?tab=equipe">
                 <User className="h-4 w-4" />
                 <span>Profil & équipe</span>
               </Link>
             </DropdownMenuItem>
 
             <DropdownMenuItem asChild className="flex items-center gap-2 cursor-pointer text-slate-600 focus:bg-slate-50 focus:text-slate-800 py-2">
-              <Link href="/parametres">
+              <Link href="/parametres?tab=societe">
                 <Building2 className="h-4 w-4" />
                 <span>Organisation</span>
               </Link>
             </DropdownMenuItem>
-            
+
+            <DropdownMenuItem asChild className="flex items-center gap-2 cursor-pointer text-slate-600 focus:bg-slate-50 focus:text-slate-800 py-2">
+              <Link href="/parametres?tab=abonnement">
+                <CreditCard className="h-4 w-4" />
+                <span>Abonnement</span>
+              </Link>
+            </DropdownMenuItem>
+
             <DropdownMenuSeparator className="bg-slate-100" />
             
             <DropdownMenuItem

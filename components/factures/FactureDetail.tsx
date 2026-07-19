@@ -200,6 +200,26 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
           note: p.note || undefined,
         }));
 
+        // Auto-correction : une facture soldée/partiellement payée ne doit pas
+        // rester en brouillon/envoyée. On répare aussi les anciennes factures.
+        const paidSum = payments.reduce((s, p) => s + p.amount, 0);
+        const invTotal = Number(invData.total);
+        let healedDbStatus: string | null = null;
+        if (invTotal > 0 && paidSum >= invTotal && mappedStatus !== "payée") {
+          healedDbStatus = "paid";
+          mappedStatus = "payée";
+        } else if (paidSum > 0 && paidSum < invTotal && (mappedStatus === "brouillon" || mappedStatus === "envoyée")) {
+          healedDbStatus = "partial";
+          mappedStatus = "partiellement payée";
+        }
+        if (healedDbStatus) {
+          await supabase
+            .schema("nafaflow")
+            .from("invoices")
+            .update({ status: healedDbStatus })
+            .eq("id", actualInvoiceId);
+        }
+
         // Generate dynamic timeline events
         const timeline = [];
         const issueDateStr = invData.issue_date || invData.created_at.slice(0, 10);
@@ -434,17 +454,16 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
         throw payErr;
       }
 
-      // 3. Recalculate status
+      // 3. Recalculate status : un encaissement fait toujours avancer le statut
+      // (une facture soldée ne peut pas rester en brouillon).
       const newTotalPaid = totalPaid + amount;
-      let newStatus = invoice.status;
-      if (invoice.status !== "brouillon") {
-        if (newTotalPaid >= total) {
-          newStatus = "payée";
-        } else if (newTotalPaid > 0) {
-          newStatus = "partiellement payée";
-        } else {
-          newStatus = "envoyée";
-        }
+      let newStatus: string;
+      if (total > 0 && newTotalPaid >= total) {
+        newStatus = "payée";
+      } else if (newTotalPaid > 0) {
+        newStatus = "partiellement payée";
+      } else {
+        newStatus = invoice.status === "brouillon" ? "brouillon" : "envoyée";
       }
 
       // Map frontend status to DB status
@@ -568,17 +587,15 @@ export default function FactureDetail({ invoiceId }: FactureDetailProps) {
 
       if (cashErr) throw cashErr;
 
-      // 3. Recalculate status
+      // 3. Recalculate status après suppression d'un paiement
       const newTotalPaid = totalPaid - paymentToDelete.amount;
-      let newStatus = invoice.status;
-      if (invoice.status !== "brouillon") {
-        if (newTotalPaid >= total) {
-          newStatus = "payée";
-        } else if (newTotalPaid > 0) {
-          newStatus = "partiellement payée";
-        } else {
-          newStatus = "envoyée";
-        }
+      let newStatus: string;
+      if (total > 0 && newTotalPaid >= total) {
+        newStatus = "payée";
+      } else if (newTotalPaid > 0) {
+        newStatus = "partiellement payée";
+      } else {
+        newStatus = invoice.status === "brouillon" ? "brouillon" : "envoyée";
       }
 
       // Map frontend status to DB status
